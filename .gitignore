@@ -16,6 +16,10 @@ build/
 .cache/
 *.log
 
+# Backups
+backups/*
+!backups/.gitkeep
+
 # IDE/Editor
 .idea/
 .vscode/

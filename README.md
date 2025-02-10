@@ -6,7 +6,7 @@ This project is a Contentful migration tool that allows you to back up, restore,
 
 ### 1. Clone the Repository
 ```sh
- git clone https://github.com/your-repo/contentful-migration-tool.git
+ git clone https://github.com/AlexandrFedorenko/contentful-migration-tool
  cd contentful-migration-tool
 ```
 
