@@ -1,40 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# Contentful Migration Tool
 
-## Getting Started
+This project is a Contentful migration tool that allows you to back up, restore, and migrate content between different environments.
 
-First, run the development server:
+## 🚀 Installation & Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+### 1. Clone the Repository
+```sh
+ git clone https://github.com/your-repo/contentful-migration-tool.git
+ cd contentful-migration-tool
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Install Dependencies
+```sh
+ npm install
+```
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+### 3. Set Up Environment Variables
+Create a `.env.local` file in the root directory and add the following Contentful API keys:
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+```ini
+NEXT_PUBLIC_CONTENTFUL_MANAGEMENT_TOKEN=your_management_token
+NEXT_PUBLIC_CONTENTFUL_CDA_TOKEN=your_cda_token
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+#### Where to Get API Keys?
+- **Management Token**: Get it from [Contentful API Keys](https://app.contentful.com/) → "Content Management API"
+- **CDA Token**: Get it from "Content Delivery API" in Contentful settings
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Start the Application
+```sh
+npm run dev
+```
+The application will be available at `http://localhost:3000`
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 📌 Features
+### ✅ Full Content Backup
+Backup all Contentful data including:
+- Entries
+- Content Types
+- Assets
+- Locales
+- Webhooks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+### ✅ Migration Between Environments
+Migrate content from one environment (e.g., `master`) to another (e.g., `dev`).
+- **Standard Migration**: Copies all content
+- **Advanced Migration**: Creates a DIFF file to copy only new and modified entries
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### ✅ Restore Content from Backup
+Restore Contentful content from a previous backup.
 
-## Deploy on Vercel
+### ✅ Delete Backups
+Remove old backups directly from the UI.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+
+
+## ⚠️ Important: Backup Before Production Migration
+Before migrating content to production, always create a full backup using this guide:
+[Contentful CLI Backup Guide](https://rohitgupta.netlify.app/import-and-export-data-with-contentful-cli)
+
+---
+
+## 🛠 Troubleshooting & Common Issues
+| Error | Cause | Solution |
+|----------------------|--------------------------------------------------|--------------------------------------------------|
+| The content type could not be found | Content Type is missing in the target environment | Manually transfer Content Types first |
+| Cannot delete locale | Locales cannot be removed via API | Manually disable or leave them |
+| Asset already exists | Duplicate asset during import | Delete the existing asset and retry |
+| Some entries failed to import | Content Type structure changed | Ensure the Content Type exists and is unchanged |
+
+---
+
+## 📜 License
+This project is licensed under the MIT License.
+
+## 📧 Contact
+For issues or feature requests, open an issue in the repository or contact the maintainer.
