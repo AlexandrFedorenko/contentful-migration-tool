@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Grid, Button, Dialog, DialogTitle, DialogContent, TextField, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
+import { Container, Typography, Box, Paper, Grid, Button, Dialog, DialogTitle, DialogContent, TextField, CircularProgress, Checkbox, FormControlLabel, Input, InputLabel, FormControl } from '@mui/material';
 import SpaceSelector from '@/components/SpaceSelector';
 import EnvironmentSelector from '@/components/EnvironmentSelector';
 import BackupList from '@/components/BackupList';
@@ -25,6 +25,9 @@ export default function Home() {
   const [showAuthDialog, setShowAuthDialog] = useState<boolean>(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [token, setToken] = useState('');
+  const [customRestoreMode, setCustomRestoreMode] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [loadingCustomRestore, setLoadingCustomRestore] = useState(false);
 
   useEffect(() => {
     if (state.spaceId) {
@@ -90,6 +93,79 @@ export default function Home() {
     setShowAuthDialog(false);
   };
 
+  const handleCustomRestoreModeChange = (checked: boolean) => {
+    setCustomRestoreMode(checked);
+    if (checked) {
+      // Отключаем обычный restore mode
+      dispatch({ type: "SET_RESTORE_MODE", payload: false });
+    }
+  };
+
+  const handleRestoreModeChange = (checked: boolean) => {
+    if (!customRestoreMode) {
+      dispatch({ type: "SET_RESTORE_MODE", payload: checked });
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === 'application/json') {
+      setSelectedFile(file);
+    } else {
+      dispatch({ type: "SET_STATUS", payload: "Please select a valid JSON file" });
+    }
+  };
+
+  const handleCustomRestore = async () => {
+    if (!selectedFile || !state.selectedTarget || !state.spaceId) {
+      dispatch({ type: "SET_STATUS", payload: "Please select a file and target environment" });
+      return;
+    }
+
+    // Validate environment name
+    if (state.selectedTarget === 'master') {
+      dispatch({ type: "SET_STATUS", payload: "Cannot replace master environment for safety reasons" });
+      return;
+    }
+
+    setLoadingCustomRestore(true);
+    
+    try {
+      // Read file content
+      const fileContent = await selectedFile.text();
+
+      dispatch({ type: "SET_STATUS", payload: "Starting custom restore (this will replace the environment)..." });
+
+      const response = await fetch('/api/custom-restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spaceId: state.spaceId,
+          targetEnvironment: state.selectedTarget,
+          fileContent: fileContent
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        dispatch({ type: "SET_STATUS", payload: `Custom restore completed successfully! Backup created: ${data.backupFile}` });
+        await loadBackups(state.spaceId);
+        setSelectedFile(null);
+        setCustomRestoreMode(false);
+      } else {
+        throw new Error(data.error || 'Custom restore failed');
+      }
+    } catch (error) {
+      console.error('Custom restore error:', error);
+      dispatch({ type: "SET_STATUS", payload: `Custom restore failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setLoadingCustomRestore(false);
+    }
+  };
+
   return (
     <Container 
       maxWidth="lg" 
@@ -123,19 +199,31 @@ export default function Home() {
                 control={
                   <Checkbox
                     checked={!!state.restoreMode}
-                    onChange={e => dispatch({ type: "SET_RESTORE_MODE", payload: e.target.checked })}
+                    onChange={e => handleRestoreModeChange(e.target.checked)}
                     color="primary"
+                    disabled={customRestoreMode}
                   />
                 }
                 label="Restore"
                 sx={{ mt: 2 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={customRestoreMode}
+                    onChange={e => handleCustomRestoreModeChange(e.target.checked)}
+                    color="secondary"
+                  />
+                }
+                label="Custom Restore"
+                sx={{ mt: 1 }}
               />
             </Paper>
           </Grid>
 
           {state.spaceId && (
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2, border: state.restoreMode ? '2px solid #1976d2' : undefined }}>
+              <Paper sx={{ p: 2, border: (state.restoreMode || customRestoreMode) ? '2px solid #1976d2' : undefined }}>
                 <Typography variant="h6" gutterBottom>
                   Environments
                 </Typography>
@@ -144,7 +232,7 @@ export default function Home() {
                   value={state.selectedDonor}
                   onChange={(env) => dispatch({ type: "SET_DATA", payload: { selectedDonor: env } })}
                   label="Source Environment"
-                  disabled={!!state.restoreMode}
+                  disabled={!!state.restoreMode || customRestoreMode}
                 />
                 <Box sx={{ mt: 2 }} />
                 <EnvironmentSelector 
@@ -158,7 +246,7 @@ export default function Home() {
                   <Button 
                     variant="contained" 
                     color="primary"
-                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.loading.loadingMigrate || state.restoreMode}
+                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.loading.loadingMigrate || state.restoreMode || customRestoreMode || loadingCustomRestore}
                     onClick={handleBackup}
                   >
                     {state.loading.loadingBackup ? <CircularProgress size={20} color="inherit" /> : 'Backup Source'}
@@ -166,7 +254,7 @@ export default function Home() {
                   <Button 
                     variant="contained" 
                     color="secondary"
-                    disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate || state.restoreMode}
+                    disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate || state.restoreMode || customRestoreMode || loadingCustomRestore}
                     onClick={handleMigration}
                   >
                     {state.loading.loadingMigrate ? (
@@ -176,6 +264,46 @@ export default function Home() {
                     )}
                   </Button>
                 </Box>
+
+                {/* Custom Restore Section */}
+                {customRestoreMode && (
+                  <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Custom Restore
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      ⚠️ This will completely replace the target environment with the selected file.
+                    </Typography>
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel htmlFor="file-input">Select Backup File</InputLabel>
+                      <Input
+                        id="file-input"
+                        type="file"
+                        inputProps={{ accept: '.json' }}
+                        onChange={handleFileSelect}
+                        disabled={loadingCustomRestore}
+                      />
+                    </FormControl>
+                    {selectedFile && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Selected: {selectedFile.name}
+                      </Typography>
+                    )}
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      fullWidth
+                      disabled={!selectedFile || !state.selectedTarget || loadingCustomRestore || state.selectedTarget === 'master'}
+                      onClick={handleCustomRestore}
+                    >
+                      {loadingCustomRestore ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : (
+                        'Replace Environment & Import'
+                      )}
+                    </Button>
+                  </Box>
+                )}
               </Paper>
             </Grid>
           )}
