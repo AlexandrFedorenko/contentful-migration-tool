@@ -24,14 +24,11 @@ export interface EnvironmentsResponse extends ApiResponse {
   }>;
 }
 
-export interface MigrationResponse extends ApiResponse {
-  diffSize?: number;
-  statistics?: {
-    created: number;
-    updated: number;
-    skipped: number;
-    errors: number;
-  };
+export interface MigrationResponse {
+  success: boolean;
+  error?: string;
+  sourceBackupFile?: string;
+  targetBackupFile?: string;
 }
 
 export interface RestoreResponse extends ApiResponse {

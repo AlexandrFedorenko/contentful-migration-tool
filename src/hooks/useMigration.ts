@@ -1,76 +1,76 @@
 // src/hooks/useMigration.ts
 import { useCallback } from "react";
-import { useGlobalContext } from "@/context/GlobalContext"; // ваш глобальный контекст
+import { useGlobalContext } from "@/context/GlobalContext";
+import { api } from "@/utils/api";
+import { useBackups } from "./useBackups";
 import { useLoading } from "./useLoading";
-import { handleError } from "@/utils/errorHandler";
-import { getNotificationMessage } from "@/utils/notifications";
 
 interface MigrationResponse {
     success: boolean;
-    message?: string;
-    diffSize?: number;
-    statistics?: Record<string, number>;
+    error?: string;
+    sourceBackupFile?: string;
+    targetBackupFile?: string;
 }
 
 export function useMigration() {
     const { state, dispatch } = useGlobalContext();
-    const { withLoading } = useLoading();
+    const { loadBackups } = useBackups();
+    const { setLoading } = useLoading();
 
     const handleMigration = useCallback(async () => {
         try {
-            const { spaceId, selectedDonor, selectedTarget, useAdvanced } = state;
+            const { spaceId, selectedDonor, selectedTarget } = state;
 
             if (!spaceId || !selectedDonor || !selectedTarget) {
-                throw new Error('Space ID, donor and target environments are required');
+                throw new Error('Space ID, source and target environments are required');
+            }
+
+            if (selectedDonor === selectedTarget) {
+                throw new Error('Source and target environments must be different');
             }
 
             dispatch({ 
                 type: "SET_STATUS", 
-                payload: getNotificationMessage('migration', 'start', { 
-                    from: selectedDonor,
-                    to: selectedTarget
-                })
+                payload: `Starting migration from ${selectedDonor} to ${selectedTarget}...`
             });
 
-            await withLoading("loadingMigrate", async () => {
+            // Устанавливаем состояние загрузки
+            setLoading("loadingMigrate", true);
+
+            try {
                 // Отправляем запрос на API
-                const response = await fetch('/api/migrate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        spaceId,
-                        sourceEnvironment: selectedDonor,
-                        targetEnvironment: selectedTarget,
-                        useAdvanced
-                    })
+                const response = await api.post<MigrationResponse>('/api/migrate', {
+                    spaceId,
+                    sourceEnvironment: selectedDonor,
+                    targetEnvironment: selectedTarget
                 });
 
-                if (!response.ok) {
-                    const data = await response.json();
-                    throw new Error(data.error || 'Failed to migrate content');
+                if (response.success) {
+                    dispatch({ 
+                        type: "SET_STATUS", 
+                        payload: `Migration completed successfully! Created backups: ${response.data?.sourceBackupFile}, ${response.data?.targetBackupFile}`
+                    });
+                    
+                    // Обновляем список бэкапов
+                    await loadBackups(spaceId);
+                } else {
+                    throw new Error(response.error || 'Failed to migrate content');
                 }
-            });
-
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: getNotificationMessage('migration', 'success', { 
-                    from: selectedDonor,
-                    to: selectedTarget
-                })
-            });
+            } finally {
+                // Сбрасываем состояние загрузки
+                setLoading("loadingMigrate", false);
+            }
 
         } catch (error) {
             console.error("❌ Migration error:", error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to migrate content';
+            
             dispatch({ 
                 type: "SET_STATUS", 
-                payload: getNotificationMessage('migration', 'error', { 
-                    error: handleError(error) 
-                })
+                payload: `Migration failed: ${errorMessage}`
             });
         }
-    }, [state.spaceId, state.selectedDonor, state.selectedTarget, state.useAdvanced, dispatch, withLoading]);
+    }, [state.spaceId, state.selectedDonor, state.selectedTarget, dispatch, loadBackups, setLoading]);
 
     return { handleMigration };
 }

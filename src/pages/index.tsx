@@ -158,7 +158,7 @@ export default function Home() {
                   <Button 
                     variant="contained" 
                     color="primary"
-                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.restoreMode}
+                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.loading.loadingMigrate || state.restoreMode}
                     onClick={handleBackup}
                   >
                     {state.loading.loadingBackup ? <CircularProgress size={20} color="inherit" /> : 'Backup Source'}
@@ -168,9 +168,12 @@ export default function Home() {
                     color="secondary"
                     disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate || state.restoreMode}
                     onClick={handleMigration}
-                    startIcon={state.loading.loadingMigrate ? <CircularProgress size={20} color="inherit" /> : null}
                   >
-                    {state.loading.loadingMigrate ? 'Migrating...' : 'Migrate Content'}
+                    {state.loading.loadingMigrate ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      'Migrate Content'
+                    )}
                   </Button>
                 </Box>
               </Paper>
