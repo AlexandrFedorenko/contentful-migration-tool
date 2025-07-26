@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { Environment, LoadingState } from '@/types/common';
 import { Backup } from '@/types/backup';
+import { RestoreStep } from '@/components/RestoreProgressModal';
 
 // 1) Определяем интерфейсы
 export interface Space {
@@ -40,6 +41,21 @@ export interface GlobalState {
     errors: {
         [key: string]: string | null;
     };
+    restoreMode: boolean;
+    // Новые поля для управления ошибками
+    errorInstruction: any | null;
+    errorModalOpen: boolean;
+    lastErrorMessage: string | null;
+    errorBackupFile: string | null; // Файл бэкапа, который вызвал ошибку
+    errorInstructions: any[]; // Массив всех ошибок для детального отображения
+    // Поля для прогресса восстановления
+    restoreProgress: {
+      isActive: boolean;
+      steps: RestoreStep[];
+      currentStep: number;
+      overallProgress: number;
+      restoringBackupName?: string; // Имя бэкапа, который сейчас восстанавливается
+    };
 }
 
 // 3) Начальное значение
@@ -71,7 +87,21 @@ const initialState: GlobalState = {
         loadingMigrate: false,
         loadingAuth: false,
     },
-    errors: {}
+    errors: {},
+    restoreMode: false,
+    // Новые поля для управления ошибками
+    errorInstruction: null,
+    errorModalOpen: false,
+    lastErrorMessage: null,
+    errorBackupFile: null,
+    errorInstructions: [],
+    // Поля для прогресса восстановления
+    restoreProgress: {
+      isActive: false,
+      steps: [],
+      currentStep: 0,
+      overallProgress: 0
+    }
 };
 
 // 4) Описание Action
@@ -88,7 +118,14 @@ type Action =
     | { type: "SET_SPACES"; payload: Space[] }
     | { type: "SET_ENVIRONMENTS"; payload: { donorEnvironments: Environment[]; targetEnvironments: Environment[] } }
     | { type: "SET_BACKUPS"; payload: Backup[] }
-    | { type: "SET_ERROR"; payload: { key: string; value: string | null } };
+    | { type: "SET_ERROR"; payload: { key: string; value: string | null } }
+    | { type: "SET_RESTORE_MODE"; payload: boolean }
+    | { type: "SET_ERROR_INSTRUCTION"; payload: { instruction: any; errorMessage: string; backupFile?: string } }
+    | { type: "SET_ERROR_INSTRUCTIONS"; payload: { instructions: any[]; errorMessage: string; backupFile?: string } }
+    | { type: "CLEAR_ERROR_INSTRUCTION" }
+    | { type: "TOGGLE_ERROR_MODAL"; payload: boolean }
+    | { type: "SET_RESTORE_PROGRESS"; payload: { isActive: boolean; steps?: RestoreStep[]; currentStep?: number; overallProgress?: number; restoringBackupName?: string } }
+    | { type: "UPDATE_RESTORE_STEP"; payload: { stepIndex: number; status: RestoreStep['status']; message?: string; duration?: string } };
 
 // 5) Сам reducer
 function reducer(state: GlobalState, action: Action): GlobalState {
@@ -118,7 +155,7 @@ function reducer(state: GlobalState, action: Action): GlobalState {
             return {
                 ...state,
                 statusMessage: action.payload,
-                alertOpen: true
+                alertOpen: !!action.payload
             };
         case "CLOSE_ALERT":
             return {
@@ -163,6 +200,70 @@ function reducer(state: GlobalState, action: Action): GlobalState {
             return {
                 ...state,
                 errors: { ...state.errors, [action.payload.key]: action.payload.value }
+            };
+        case "SET_RESTORE_MODE":
+            return {
+                ...state,
+                restoreMode: action.payload
+            };
+        case "SET_ERROR_INSTRUCTION":
+            return {
+                ...state,
+                errorInstruction: action.payload.instruction,
+                lastErrorMessage: action.payload.errorMessage,
+                errorBackupFile: action.payload.backupFile || null,
+                errorModalOpen: true
+            };
+        case "SET_ERROR_INSTRUCTIONS":
+            return {
+                ...state,
+                errorInstructions: action.payload.instructions,
+                lastErrorMessage: action.payload.errorMessage,
+                errorBackupFile: action.payload.backupFile || null,
+                errorModalOpen: true
+            };
+        case "CLEAR_ERROR_INSTRUCTION":
+            return {
+                ...state,
+                errorInstruction: null,
+                errorInstructions: [],
+                lastErrorMessage: null,
+                errorBackupFile: null,
+                errorModalOpen: false
+            };
+        case "TOGGLE_ERROR_MODAL":
+            return {
+                ...state,
+                errorModalOpen: action.payload
+            };
+        case "SET_RESTORE_PROGRESS":
+            return {
+                ...state,
+                restoreProgress: {
+                    ...state.restoreProgress,
+                    isActive: action.payload.isActive,
+                    steps: action.payload.steps || state.restoreProgress.steps,
+                    currentStep: action.payload.currentStep ?? state.restoreProgress.currentStep,
+                    overallProgress: action.payload.overallProgress ?? state.restoreProgress.overallProgress,
+                    restoringBackupName: action.payload.restoringBackupName || state.restoreProgress.restoringBackupName
+                }
+            };
+        case "UPDATE_RESTORE_STEP":
+            const updatedSteps = [...state.restoreProgress.steps];
+            if (updatedSteps[action.payload.stepIndex]) {
+                updatedSteps[action.payload.stepIndex] = {
+                    ...updatedSteps[action.payload.stepIndex],
+                    status: action.payload.status,
+                    message: action.payload.message,
+                    duration: action.payload.duration
+                };
+            }
+            return {
+                ...state,
+                restoreProgress: {
+                    ...state.restoreProgress,
+                    steps: updatedSteps
+                }
             };
         default:
             return state;

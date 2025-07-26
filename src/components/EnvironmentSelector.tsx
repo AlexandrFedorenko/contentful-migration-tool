@@ -7,9 +7,10 @@ interface EnvironmentSelectorProps {
   value: string;
   onChange: (value: string) => void;
   label: string;
+  disabled?: boolean;
 }
 
-export default function EnvironmentSelector({ environments, value, onChange, label }: EnvironmentSelectorProps) {
+export default function EnvironmentSelector({ environments, value, onChange, label, disabled }: EnvironmentSelectorProps) {
   const handleChange = (event: SelectChangeEvent) => {
     onChange(event.target.value);
   };
@@ -21,6 +22,7 @@ export default function EnvironmentSelector({ environments, value, onChange, lab
         value={value}
         onChange={handleChange}
         label={label}
+        disabled={disabled}
       >
         {environments.map((env) => (
           <MenuItem key={env.id} value={env.id}>{env.name}</MenuItem>

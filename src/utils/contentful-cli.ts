@@ -164,6 +164,11 @@ export class ContentfulCLI {
   }
   
   /**
+   * Очищает старые JSON файлы логов, оставляя только последние 5
+   */
+
+
+  /**
    * Выход из Contentful CLI
    */
   static async logout(): Promise<boolean> {
@@ -284,15 +289,24 @@ export class ContentfulCLI {
    * Восстанавливает бэкап в указанное окружение
    */
   static async restoreBackup(spaceId: string, fileName: string, targetEnvironment: string): Promise<boolean> {
+    console.log('🔍 DEBUG: restoreBackup function STARTED');
+    console.log('🔍 DEBUG: Parameters:', { spaceId, fileName, targetEnvironment });
+    console.log('🔍 DEBUG: Current working directory:', process.cwd());
+    console.log('🔍 DEBUG: Available files in /app/:', fs.readdirSync('/app'));
+    
     try {
+      console.log('🔍 DEBUG: restoreBackup function called');
       console.log(`Restoring backup ${fileName} to space ${spaceId}, environment ${targetEnvironment}...`);
       
       // Полный путь к файлу бэкапа
       const backupFile = path.join(process.cwd(), 'backups', spaceId, fileName);
+      console.log('🔍 DEBUG: Backup file path:', backupFile);
       
       if (!fs.existsSync(backupFile)) {
         throw new Error(`Backup file not found: ${backupFile}`);
       }
+      
+      console.log('🔍 DEBUG: Backup file exists, proceeding with import...');
       
       // Команда для импорта
       const importProcess = spawn('contentful', [
@@ -310,6 +324,7 @@ export class ContentfulCLI {
       
       return new Promise((resolve, reject) => {
         let output = '';
+        let errorOutput = '';
         
         importProcess.stdout.on('data', (data: Buffer) => {
           output += data.toString();
@@ -317,20 +332,75 @@ export class ContentfulCLI {
         });
         
         importProcess.stderr.on('data', (data: Buffer) => {
+          errorOutput += data.toString();
           console.error('Restore error:', data.toString());
         });
         
-        importProcess.on('close', (code: number) => {
+        importProcess.on('close', async (code: number) => {
+          console.log('Process closed with code:', code);
+          console.log('Output length:', output.length);
+          console.log('Error output length:', errorOutput.length);
+          
           if (code === 0) {
             console.log('Backup restored successfully');
             resolve(true);
           } else {
             console.error('Failed to restore backup, exit code:', code);
-            reject(new Error(`Failed to restore backup: ${output}`));
+            console.log('🔍 DEBUG: Processing error case');
+            
+            // Объединяем stdout и stderr для поиска JSON файла
+            const fullOutput = output + errorOutput;
+            
+            // Ищем JSON файл с детальным логом
+            console.log('Searching for JSON log pattern in output...');
+            console.log('Full output preview:', fullOutput.substring(0, 500));
+            
+            // Ждем 5 секунд, чтобы файл успел создаться
+            console.log('Waiting 5 seconds for JSON log file to be created...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            // Ищем файлы с contentful-import-error-log в названии
+            let jsonLogPath = null;
+            try {
+              const appFiles = fs.readdirSync('/app');
+              console.log('Available files in /app/:', appFiles);
+              
+              const jsonLogFile = appFiles.find(file => 
+                file.includes('contentful-import-error-log') && file.endsWith('.json')
+              );
+              
+              if (jsonLogFile) {
+                jsonLogPath = `/app/${jsonLogFile}`;
+                console.log('Found JSON log file:', jsonLogPath);
+              } else {
+                console.log('No JSON log file found with contentful-import-error-log pattern');
+              }
+            } catch (dirError) {
+              console.error('Error reading /app directory:', dirError);
+            }
+            
+            if (jsonLogPath) {
+              try {
+                // Читаем JSON файл
+                const jsonLogContent = fs.readFileSync(jsonLogPath, 'utf8');
+                const jsonLog = JSON.parse(jsonLogContent);
+                console.log('Successfully read JSON log file');
+                
+                // Передаем JSON лог в ошибке
+                reject(new Error(`JSON_LOG_CONTENT:${JSON.stringify(jsonLog, null, 2)}`));
+              } catch (jsonError) {
+                console.error('Error reading JSON log:', jsonError);
+                reject(new Error(`Failed to restore backup: ${fullOutput}`));
+              }
+            } else {
+              console.log('No JSON log file found, showing console output');
+              reject(new Error(`Failed to restore backup: ${fullOutput}`));
+            }
           }
         });
       });
     } catch (error) {
+      console.log('🔍 DEBUG: restoreBackup function ERROR caught');
       console.error('Error restoring backup:', error);
       throw error;
     }

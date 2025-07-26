@@ -1,56 +1,85 @@
 import { useCallback } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
-import { useLoading } from "./useLoading";
-import { handleError } from "@/utils/errorHandler";
+import { api } from "@/utils/api";
 
 export function useRestore() {
     const { state, dispatch } = useGlobalContext();
-    const { withLoading } = useLoading();
 
-    const handleRestore = useCallback(async () => {
+    const handleRestore = useCallback(async (backupFileName: string) => {
+        const { spaceId, selectedTarget } = state;
+
         try {
-            const { spaceId, selectedBackup, selectedTarget } = state;
-
-            if (!spaceId || !selectedBackup || !selectedTarget) {
+            if (!spaceId || !backupFileName || !selectedTarget) {
                 throw new Error('Space ID, backup file and target environment are required');
             }
 
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Starting restore of ${selectedBackup} to ${selectedTarget} environment...` 
-            });
-
-            await withLoading("loadingRestore", async () => {
-                const response = await fetch('/api/restore', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        spaceId,
-                        fileName: selectedBackup,
-                        targetEnvironment: selectedTarget
-                    })
-                });
-
-                if (!response.ok) {
-                    const data = await response.json();
-                    throw new Error(data.error || 'Failed to restore backup');
+            // Начинаем восстановление - показываем спиннер
+            dispatch({
+                type: "SET_RESTORE_PROGRESS",
+                payload: {
+                    isActive: true,
+                    steps: [], // No longer tracking detailed steps here
+                    currentStep: 1, // Just a simple indicator that it's active
+                    overallProgress: 0,
+                    restoringBackupName: backupFileName // Добавляем имя бэкапа
                 }
             });
 
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Backup ${selectedBackup} restored to ${selectedTarget} successfully` 
+            // Выполняем восстановление
+            const response = await api.post('/api/restore', {
+                spaceId,
+                fileName: backupFileName,
+                targetEnvironment: selectedTarget
             });
+
+            if (response.success) {
+                // Завершаем успешно
+                dispatch({
+                    type: "SET_RESTORE_PROGRESS",
+                    payload: {
+                        isActive: false,
+                        currentStep: 0,
+                        overallProgress: 0,
+                        restoringBackupName: undefined // Очищаем имя бэкапа
+                    }
+                });
+
+                // Очищаем инструкции об ошибках при успешном восстановлении
+                dispatch({ type: "CLEAR_ERROR_INSTRUCTION" });
+                
+                dispatch({ 
+                    type: "SET_STATUS", 
+                    payload: `Backup ${backupFileName} restored to ${selectedTarget} successfully` 
+                });
+            } else {
+                throw new Error(response.error || 'Failed to restore backup');
+            }
         } catch (error) {
             console.error("❌ Restore error:", error);
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Error restoring backup: ${handleError(error)}` 
+            const errorMessage = error instanceof Error ? error.message : 'Failed to restore backup';
+            
+            // Завершаем с ошибкой
+            dispatch({
+                type: "SET_RESTORE_PROGRESS",
+                payload: {
+                    isActive: false,
+                    currentStep: 0,
+                    overallProgress: 0,
+                    restoringBackupName: undefined // Очищаем имя бэкапа
+                }
+            });
+            
+            // Показываем лог в попапе
+            dispatch({
+                type: "SET_ERROR_INSTRUCTION",
+                payload: { 
+                    instruction: null, 
+                    errorMessage, 
+                    backupFile: backupFileName 
+                }
             });
         }
-    }, [state.spaceId, state.selectedBackup, state.selectedTarget, dispatch, withLoading]);
+    }, [state.spaceId, state.selectedTarget, dispatch]);
 
     return { handleRestore };
 }

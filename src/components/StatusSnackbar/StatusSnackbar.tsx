@@ -23,7 +23,7 @@ export default function StatusSnackbar() {
 
     return (
         <Snackbar
-            open={alertOpen}
+            open={alertOpen && !!statusMessage}
             autoHideDuration={6000}
             onClose={handleClose}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

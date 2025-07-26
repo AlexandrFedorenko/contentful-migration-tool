@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Grid, Button, Alert, Snackbar, Dialog, DialogTitle, DialogContent, TextField, CircularProgress } from '@mui/material';
+import { Container, Typography, Box, Paper, Grid, Button, Dialog, DialogTitle, DialogContent, TextField, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import SpaceSelector from '@/components/SpaceSelector';
 import EnvironmentSelector from '@/components/EnvironmentSelector';
 import BackupList from '@/components/BackupList';
@@ -11,6 +11,8 @@ import { useMigration } from '@/hooks/useMigration';
 import ContentfulBrowserAuth from '@/components/ContentfulBrowserAuth';
 import { useAuth } from '@/context/AuthContext';
 import BlurredModal from '@/components/BlurredModal';
+import JsonLogDisplay from '@/components/JsonLogDisplay';
+
 
 export default function Home() {
   const { state, dispatch } = useGlobalContext();
@@ -20,7 +22,6 @@ export default function Home() {
   const { handleMigration } = useMigration();
   const { isLoggedIn, isLoading } = useAuth();
 
-  const [showAlert, setShowAlert] = useState(false);
   const [showAuthDialog, setShowAuthDialog] = useState<boolean>(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [token, setToken] = useState('');
@@ -34,7 +35,7 @@ export default function Home() {
 
   useEffect(() => {
     // Показывать алерт только если есть текст
-    setShowAlert(!!state.statusMessage);
+    // setShowAlert(!!state.statusMessage); // This line is removed
   }, [state.statusMessage]);
 
   useEffect(() => {
@@ -76,10 +77,10 @@ export default function Home() {
     }
   }, []);
 
-  const handleCloseAlert = () => {
-    setShowAlert(false);
-    dispatch({ type: "SET_STATUS", payload: null });
-  };
+  // const handleCloseAlert = () => { // This function is removed
+  //   setShowAlert(false);
+  //   dispatch({ type: "SET_STATUS", payload: null });
+  // };
 
   const handleAuthClick = () => {
     setShowAuthDialog(true);
@@ -118,12 +119,23 @@ export default function Home() {
                 Select Space
               </Typography>
               <SpaceSelector />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!state.restoreMode}
+                    onChange={e => dispatch({ type: "SET_RESTORE_MODE", payload: e.target.checked })}
+                    color="primary"
+                  />
+                }
+                label="Restore"
+                sx={{ mt: 2 }}
+              />
             </Paper>
           </Grid>
 
           {state.spaceId && (
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2 }}>
+              <Paper sx={{ p: 2, border: state.restoreMode ? '2px solid #1976d2' : undefined }}>
                 <Typography variant="h6" gutterBottom>
                   Environments
                 </Typography>
@@ -132,6 +144,7 @@ export default function Home() {
                   value={state.selectedDonor}
                   onChange={(env) => dispatch({ type: "SET_DATA", payload: { selectedDonor: env } })}
                   label="Source Environment"
+                  disabled={!!state.restoreMode}
                 />
                 <Box sx={{ mt: 2 }} />
                 <EnvironmentSelector 
@@ -139,21 +152,21 @@ export default function Home() {
                   value={state.selectedTarget}
                   onChange={(env) => dispatch({ type: "SET_DATA", payload: { selectedTarget: env } })}
                   label="Target Environment"
+                  disabled={false}
                 />
                 <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
                   <Button 
                     variant="contained" 
                     color="primary"
-                    disabled={!state.selectedDonor || state.loading.loadingBackup}
+                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.restoreMode}
                     onClick={handleBackup}
                   >
-                
                     {state.loading.loadingBackup ? <CircularProgress size={20} color="inherit" /> : 'Backup Source'}
                   </Button>
                   <Button 
                     variant="contained" 
                     color="secondary"
-                    disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate}
+                    disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate || state.restoreMode}
                     onClick={handleMigration}
                     startIcon={state.loading.loadingMigrate ? <CircularProgress size={20} color="inherit" /> : null}
                   >
@@ -304,6 +317,18 @@ export default function Home() {
           </Box>
         </DialogContent>
       </Dialog>
+
+      {/* Модальное окно с инструкциями по ошибкам */}
+      <JsonLogDisplay
+        open={state.errorModalOpen}
+        onClose={() => dispatch({ type: "TOGGLE_ERROR_MODAL", payload: false })}
+        onMinimize={() => dispatch({ type: "TOGGLE_ERROR_MODAL", payload: false })}
+        errorMessage={state.lastErrorMessage || undefined}
+        backupFileName={state.errorBackupFile || undefined}
+      />
+
+      {/* Модальное окно прогресса восстановления */}
+
     </Container>
   );
 }
