@@ -23,6 +23,9 @@ export interface LoadingState {
   loadingMigrate: boolean;
   loadingMigration: boolean;
   loadingAuth: boolean;
+  loadingAnalyze: boolean;
+  loadingCustomMigrate: boolean;
+  loadingCustomRestore: boolean;
 }
 
 export type LoadingKeys = keyof LoadingState; 

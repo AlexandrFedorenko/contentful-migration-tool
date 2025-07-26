@@ -243,4 +243,58 @@ export class ContentfulManagement {
       return null;
     }
   }
+
+  /**
+   * Получает список content types для окружения
+   */
+  static async getContentTypes(spaceId: string, environmentId: string): Promise<any[]> {
+    try {
+      const client = this.getClient();
+      const space = await client.getSpace(spaceId);
+      const environment = await space.getEnvironment(environmentId);
+      const response = await environment.getContentTypes({ limit: 1000 });
+      
+      return response.items.map((contentType: any) => ({
+        sys: {
+          id: contentType.sys.id,
+          type: contentType.sys.type,
+          version: contentType.sys.version
+        },
+        name: contentType.name,
+        description: contentType.description,
+        displayField: contentType.displayField,
+        fields: contentType.fields
+      }));
+    } catch (error) {
+      console.error('Error getting content types:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Получает список entries для окружения
+   */
+  static async getEntries(spaceId: string, environmentId: string): Promise<any[]> {
+    try {
+      const client = this.getClient();
+      const space = await client.getSpace(spaceId);
+      const environment = await space.getEnvironment(environmentId);
+      const response = await environment.getEntries({ limit: 1000 });
+      
+      return response.items.map((entry: any) => ({
+        sys: {
+          id: entry.sys.id,
+          contentType: {
+            sys: {
+              id: entry.sys.contentType.sys.id
+            }
+          }
+        },
+        fields: entry.fields
+      }));
+    } catch (error) {
+      console.error('Error getting entries:', error);
+      throw error;
+    }
+  }
 } 

@@ -37,6 +37,9 @@ export interface GlobalState {
         loadingDelete: boolean;
         loadingMigrate: boolean;
         loadingAuth: boolean;
+        loadingAnalyze: boolean;
+        loadingCustomMigrate: boolean;
+        loadingCustomRestore: boolean;
     };
     errors: {
         [key: string]: string | null;
@@ -86,6 +89,9 @@ const initialState: GlobalState = {
         loadingDelete: false,
         loadingMigrate: false,
         loadingAuth: false,
+        loadingAnalyze: false,
+        loadingCustomMigrate: false,
+        loadingCustomRestore: false,
     },
     errors: {},
     restoreMode: false,

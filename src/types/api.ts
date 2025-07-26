@@ -34,4 +34,30 @@ export interface MigrationResponse {
 export interface RestoreResponse extends ApiResponse {
   restoredEnvironment?: string;
   timestamp?: string;
+}
+
+export interface CustomRestoreResponse {
+  success: boolean;
+  error?: string;
+  backupFile?: string;
+}
+
+export interface AnalyzeContentTypesResponse {
+  success: boolean;
+  error?: string;
+  contentTypes?: Array<{
+    id: string;
+    name: string;
+    isNew: boolean;
+    isModified: boolean;
+  }>;
+  sourceBackupFile?: string;
+  targetBackupFile?: string;
+}
+
+export interface CustomMigrateResponse {
+  success: boolean;
+  error?: string;
+  sourceBackupFile?: string;
+  targetBackupFile?: string;
 } 

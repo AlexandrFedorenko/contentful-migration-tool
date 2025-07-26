@@ -8,6 +8,7 @@ import { useEnvironments } from '@/hooks/useEnvironments';
 import { useBackups } from '@/hooks/useBackups';
 import { useBackup } from '@/hooks/useBackup';
 import { useMigration } from '@/hooks/useMigration';
+import { useCustomMigrate } from '@/hooks/useCustomMigrate';
 import ContentfulBrowserAuth from '@/components/ContentfulBrowserAuth';
 import { useAuth } from '@/context/AuthContext';
 import BlurredModal from '@/components/BlurredModal';
@@ -20,6 +21,7 @@ export default function Home() {
   const { loadBackups } = useBackups();
   const { handleBackup } = useBackup();
   const { handleMigration } = useMigration();
+  const { analyzeContentTypes, customMigrate } = useCustomMigrate();
   const { isLoggedIn, isLoading } = useAuth();
 
   const [showAuthDialog, setShowAuthDialog] = useState<boolean>(false);
@@ -28,6 +30,16 @@ export default function Home() {
   const [customRestoreMode, setCustomRestoreMode] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loadingCustomRestore, setLoadingCustomRestore] = useState(false);
+  const [customMigrateMode, setCustomMigrateMode] = useState(false);
+  const [contentTypes, setContentTypes] = useState<Array<{
+    id: string;
+    name: string;
+    isNew: boolean;
+    isModified: boolean;
+    hasNewContent?: boolean;
+    newContentCount?: number;
+  }>>([]);
+  const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
 
   useEffect(() => {
     if (state.spaceId) {
@@ -166,6 +178,51 @@ export default function Home() {
     }
   };
 
+  const handleCustomMigrateModeChange = (checked: boolean) => {
+    setCustomMigrateMode(checked);
+    if (checked) {
+      // Отключаем другие режимы
+      dispatch({ type: "SET_RESTORE_MODE", payload: false });
+      setCustomRestoreMode(false);
+    }
+    // Сброс состояния при отключении
+    if (!checked) {
+      setContentTypes([]);
+      setSelectedContentTypes([]);
+    }
+  };
+
+  const handleAnalyzeContentTypes = async () => {
+    try {
+      const result = await analyzeContentTypes();
+      setContentTypes(result);
+      // По умолчанию выбираем все content types
+      setSelectedContentTypes(result.map(ct => ct.id));
+    } catch (error) {
+      console.error('Failed to analyze content types:', error);
+    }
+  };
+
+  const handleContentTypeToggle = (contentTypeId: string) => {
+    setSelectedContentTypes(prev => 
+      prev.includes(contentTypeId) 
+        ? prev.filter(id => id !== contentTypeId)
+        : [...prev, contentTypeId]
+    );
+  };
+
+  const handleCustomMigrate = async () => {
+    try {
+      await customMigrate(selectedContentTypes);
+      // Сброс состояния после успешной миграции
+      setCustomMigrateMode(false);
+      setContentTypes([]);
+      setSelectedContentTypes([]);
+    } catch (error) {
+      console.error('Failed to perform custom migration:', error);
+    }
+  };
+
   return (
     <Container 
       maxWidth="lg" 
@@ -201,7 +258,7 @@ export default function Home() {
                     checked={!!state.restoreMode}
                     onChange={e => handleRestoreModeChange(e.target.checked)}
                     color="primary"
-                    disabled={customRestoreMode}
+                    disabled={customRestoreMode || customMigrateMode}
                   />
                 }
                 label="Restore"
@@ -213,9 +270,21 @@ export default function Home() {
                     checked={customRestoreMode}
                     onChange={e => handleCustomRestoreModeChange(e.target.checked)}
                     color="secondary"
+                    disabled={customMigrateMode}
                   />
                 }
                 label="Custom Restore"
+                sx={{ mt: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={customMigrateMode}
+                    onChange={e => handleCustomMigrateModeChange(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Custom Migrate"
                 sx={{ mt: 1 }}
               />
             </Paper>
@@ -223,7 +292,7 @@ export default function Home() {
 
           {state.spaceId && (
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2, border: (state.restoreMode || customRestoreMode) ? '2px solid #1976d2' : undefined }}>
+              <Paper sx={{ p: 2, border: (state.restoreMode || customRestoreMode || customMigrateMode) ? '2px solid #1976d2' : undefined }}>
                 <Typography variant="h6" gutterBottom>
                   Environments
                 </Typography>
@@ -302,6 +371,106 @@ export default function Home() {
                         'Replace Environment & Import'
                       )}
                     </Button>
+                  </Box>
+                )}
+
+                {/* Custom Migrate Section */}
+                {customMigrateMode && (
+                  <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Custom Migrate
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Select specific content types to migrate from source to target environment.
+                    </Typography>
+                    
+                    {contentTypes.length === 0 ? (
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        onClick={handleAnalyzeContentTypes}
+                        disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingAnalyze}
+                      >
+                        {state.loading.loadingAnalyze ? (
+                          <CircularProgress size={20} color="inherit" />
+                        ) : (
+                          'Analyze Content Types'
+                        )}
+                      </Button>
+                    ) : (
+                      <>
+                        <Box sx={{ maxHeight: 200, overflow: 'auto', mb: 2, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+                          {contentTypes.map((contentType) => (
+                            <FormControlLabel
+                              key={contentType.id}
+                              control={
+                                <Checkbox
+                                  checked={selectedContentTypes.includes(contentType.id)}
+                                  onChange={() => handleContentTypeToggle(contentType.id)}
+                                  color="primary"
+                                  size="small"
+                                />
+                              }
+                              label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <span>{contentType.name}</span>
+                                  {contentType.isNew && (
+                                    <Box component="span" sx={{ 
+                                      bgcolor: 'success.main', 
+                                      color: 'white', 
+                                      px: 1, 
+                                      py: 0.5, 
+                                      borderRadius: 1, 
+                                      fontSize: '0.75rem' 
+                                    }}>
+                                      NEW
+                                    </Box>
+                                  )}
+                                  {contentType.isModified && (
+                                    <Box component="span" sx={{ 
+                                      bgcolor: 'warning.main', 
+                                      color: 'white', 
+                                      px: 1, 
+                                      py: 0.5, 
+                                      borderRadius: 1, 
+                                      fontSize: '0.75rem' 
+                                    }}>
+                                      MODIFIED
+                                    </Box>
+                                  )}
+                                  {contentType.hasNewContent && (
+                                    <Box component="span" sx={{ 
+                                      bgcolor: 'info.main', 
+                                      color: 'white', 
+                                      px: 1, 
+                                      py: 0.5, 
+                                      borderRadius: 1, 
+                                      fontSize: '0.75rem' 
+                                    }}>
+                                      +{contentType.newContentCount} CONTENT
+                                    </Box>
+                                  )}
+                                </Box>
+                              }
+                              sx={{ display: 'block', mb: 1 }}
+                            />
+                          ))}
+                        </Box>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          fullWidth
+                          onClick={handleCustomMigrate}
+                          disabled={selectedContentTypes.length === 0 || state.loading.loadingCustomMigrate}
+                        >
+                          {state.loading.loadingCustomMigrate ? (
+                            <CircularProgress size={20} color="inherit" />
+                          ) : (
+                            `Migrate Selected (${selectedContentTypes.length})`
+                          )}
+                        </Button>
+                      </>
+                    )}
                   </Box>
                 )}
               </Paper>
