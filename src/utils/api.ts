@@ -1,11 +1,11 @@
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
   details?: string;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
     this.name = 'ApiError';
@@ -13,7 +13,7 @@ class ApiError extends Error {
 }
 
 export const api = {
-  async get<T = any>(url: string): Promise<ApiResponse<T>> {
+  async get<T = unknown>(url: string): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(url);
       const data = await response.json();
@@ -31,7 +31,7 @@ export const api = {
     }
   },
 
-  async post<T = any>(url: string, body: any): Promise<ApiResponse<T>> {
+  async post<T = unknown>(url: string, body: unknown): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -56,7 +56,7 @@ export const api = {
     }
   },
 
-  async delete<T = any>(url: string): Promise<ApiResponse<T>> {
+  async delete<T = unknown>(url: string): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(url, {
         method: 'DELETE',

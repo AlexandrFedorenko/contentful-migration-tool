@@ -1,6 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, SyntheticEvent } from "react";
 
-// Определяем тип и Enum вкладок. Можно экспортировать, чтобы переиспользовать в другом месте
 export enum TabIndex {
     CONTENTFUL = 0,
     CLI_INSTALLATION,
@@ -9,13 +8,18 @@ export enum TabIndex {
     PRODUCTION_TRANSFER,
 }
 
-// Кастомный хук, который управляет состоянием вкладок
-export function useDocumentationTabs(defaultIndex: TabIndex) {
+interface UseDocumentationTabsReturn {
+    tabIndex: TabIndex;
+    handleTabChange: (event: SyntheticEvent, newIndex: number) => void;
+}
+
+export function useDocumentationTabs(defaultIndex: TabIndex): UseDocumentationTabsReturn {
     const [tabIndex, setTabIndex] = useState<TabIndex>(defaultIndex);
 
-    // Обработчик смены вкладок
-    const handleTabChange = useCallback((_: React.SyntheticEvent, newIndex: number) => {
-        setTabIndex(newIndex as TabIndex);
+    const handleTabChange = useCallback((_: SyntheticEvent, newIndex: number) => {
+        if (newIndex >= TabIndex.CONTENTFUL && newIndex <= TabIndex.PRODUCTION_TRANSFER) {
+            setTabIndex(newIndex as TabIndex);
+        }
     }, []);
 
     return { tabIndex, handleTabChange };

@@ -22,7 +22,7 @@
     "module": "ESNext",
     "types": [
       "node"
-    ], // ✅ Добавили поддержку Node.js
+    ],
     "baseUrl": ".",
     "paths": {
       "@/*": [

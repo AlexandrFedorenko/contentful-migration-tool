@@ -1,52 +1,58 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { api } from "@/utils/api";
+import { RestoreResponse } from "@/types/api";
+import { parseError } from "@/utils/errorParser";
 
-export function useRestore() {
+interface UseRestoreReturn {
+    handleRestore: (backupFileName: string) => Promise<void>;
+}
+
+export function useRestore(): UseRestoreReturn {
     const { state, dispatch } = useGlobalContext();
+    const stateRef = useRef(state);
+    stateRef.current = state;
+
+    const resetProgress = useCallback((dispatch: ReturnType<typeof useGlobalContext>['dispatch']) => {
+        dispatch({
+            type: "SET_RESTORE_PROGRESS",
+            payload: {
+                isActive: false,
+                currentStep: 0,
+                overallProgress: 0,
+                restoringBackupName: undefined
+            }
+        });
+    }, []);
 
     const handleRestore = useCallback(async (backupFileName: string) => {
-        const { spaceId, selectedTarget } = state;
+        const { spaceId, selectedTarget } = stateRef.current;
 
         try {
             if (!spaceId || !backupFileName || !selectedTarget) {
                 throw new Error('Space ID, backup file and target environment are required');
             }
 
-            // Начинаем восстановление - показываем спиннер
             dispatch({
                 type: "SET_RESTORE_PROGRESS",
                 payload: {
                     isActive: true,
-                    steps: [], // No longer tracking detailed steps here
-                    currentStep: 1, // Just a simple indicator that it's active
+                    steps: [],
+                    currentStep: 1,
                     overallProgress: 0,
-                    restoringBackupName: backupFileName // Добавляем имя бэкапа
+                    restoringBackupName: backupFileName
                 }
             });
 
-            // Выполняем восстановление
-            const response = await api.post('/api/restore', {
+            const response = await api.post<RestoreResponse>('/api/restore', {
                 spaceId,
                 fileName: backupFileName,
                 targetEnvironment: selectedTarget
             });
 
             if (response.success) {
-                // Завершаем успешно
-                dispatch({
-                    type: "SET_RESTORE_PROGRESS",
-                    payload: {
-                        isActive: false,
-                        currentStep: 0,
-                        overallProgress: 0,
-                        restoringBackupName: undefined // Очищаем имя бэкапа
-                    }
-                });
-
-                // Очищаем инструкции об ошибках при успешном восстановлении
+                resetProgress(dispatch);
                 dispatch({ type: "CLEAR_ERROR_INSTRUCTION" });
-                
                 dispatch({ 
                     type: "SET_STATUS", 
                     payload: `Backup ${backupFileName} restored to ${selectedTarget} successfully` 
@@ -55,31 +61,28 @@ export function useRestore() {
                 throw new Error(response.error || 'Failed to restore backup');
             }
         } catch (error) {
-            console.error("❌ Restore error:", error);
             const errorMessage = error instanceof Error ? error.message : 'Failed to restore backup';
+            const instruction = parseError(errorMessage);
             
-            // Завершаем с ошибкой
-            dispatch({
-                type: "SET_RESTORE_PROGRESS",
-                payload: {
-                    isActive: false,
-                    currentStep: 0,
-                    overallProgress: 0,
-                    restoringBackupName: undefined // Очищаем имя бэкапа
-                }
-            });
+            resetProgress(dispatch);
             
-            // Показываем лог в попапе
-            dispatch({
-                type: "SET_ERROR_INSTRUCTION",
-                payload: { 
-                    instruction: null, 
-                    errorMessage, 
-                    backupFile: backupFileName 
-                }
-            });
+            if (instruction) {
+                dispatch({
+                    type: "SET_ERROR_INSTRUCTION",
+                    payload: { 
+                        instruction, 
+                        errorMessage, 
+                        backupFile: backupFileName 
+                    }
+                });
+            } else {
+                dispatch({
+                    type: "SET_STATUS",
+                    payload: `Restore failed: ${errorMessage}`
+                });
+            }
         }
-    }, [state.spaceId, state.selectedTarget, dispatch]);
+    }, [dispatch, resetProgress]);
 
     return { handleRestore };
 }

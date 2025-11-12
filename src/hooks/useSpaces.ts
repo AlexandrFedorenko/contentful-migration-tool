@@ -1,51 +1,49 @@
-import { useState, useEffect } from 'react';
-// import { useContentfulBrowserAuth } from './useContentfulBrowserAuth';
+import { useState, useEffect, useCallback } from 'react';
+import { Space } from '@/types/common';
+import { SpacesResponse } from '@/types/api';
 
-export interface Space {
-  sys: {
-    id: string;
-  };
-  name: string;
+interface UseSpacesReturn {
+    spaces: Space[];
+    loading: boolean;
+    error: string | null;
 }
 
-export const useSpaces = () => {
-  const [spaces, setSpaces] = useState<Space[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // const { isLoggedIn } = useContentfulBrowserAuth();
+export function useSpaces(): UseSpacesReturn {
+    const [spaces, setSpaces] = useState<Space[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchSpaces = async () => {
-      // Не делаем запрос, если пользователь не авторизован
-      // if (!isLoggedIn) {
-      //   setSpaces([]);
-      //   return;
-      // }
-      
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const response = await fetch('/api/spaces');
+    const fetchSpaces = useCallback(async () => {
+        setLoading(true);
+        setError(null);
         
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to fetch spaces');
+        try {
+            const response = await fetch('/api/spaces');
+            
+            if (!response.ok) {
+                const errorData: SpacesResponse = await response.json();
+                throw new Error(errorData.message || 'Failed to fetch spaces');
+            }
+            
+            const data: SpacesResponse = await response.json();
+            
+            if (!data.success || !data.spaces) {
+                throw new Error(data.message || 'Failed to fetch spaces');
+            }
+            
+            setSpaces(data.spaces);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to fetch spaces';
+            setError(errorMessage);
+            setSpaces([]);
+        } finally {
+            setLoading(false);
         }
-        
-        const data = await response.json();
-        setSpaces(data.spaces || []);
-      } catch (err) {
-        console.error('Error fetching spaces:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch spaces');
-        setSpaces([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+    }, []);
 
-    fetchSpaces();
-  }, []); // Добавляем isLoggedIn в зависимости
+    useEffect(() => {
+        fetchSpaces();
+    }, [fetchSpaces]);
 
-  return { spaces, loading, error };
-}; 
+    return { spaces, loading, error };
+} 

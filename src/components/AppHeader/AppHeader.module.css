@@ -3,6 +3,10 @@
     align-items: center;
     cursor: pointer;
     padding: 10px;
+    background-color: transparent;
+    border: none;
+    text-decoration: none;
+    outline: none;
 }
 
 .logo {
@@ -11,4 +15,12 @@
 
 .logo:hover {
     opacity: 0.8;
+}
+
+.docLink {
+    color: white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }

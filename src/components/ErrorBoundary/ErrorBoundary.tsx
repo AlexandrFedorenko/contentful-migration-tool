@@ -1,61 +1,50 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ReactNode } from 'react';
+import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary';
 import { Box, Typography, Button } from '@mui/material';
+import styles from './ErrorBoundary.module.css';
 
-interface Props {
+interface ErrorFallbackProps {
+    error: Error;
+    resetErrorBoundary: () => void;
+}
+
+function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps) {
+    return (
+        <Box className={styles.container}>
+            <Typography variant="h4" color="error">
+                Something went wrong
+            </Typography>
+            <Typography color="text.secondary">
+                {error.message}
+            </Typography>
+            <Button 
+                variant="contained" 
+                onClick={resetErrorBoundary}
+            >
+                Reload Page
+            </Button>
+        </Box>
+    );
+}
+
+interface ErrorBoundaryProps {
     children: ReactNode;
 }
 
-interface State {
-    hasError: boolean;
-    error: Error | null;
-}
-
-export class ErrorBoundary extends Component<Props, State> {
-    public state: State = {
-        hasError: false,
-        error: null
-    };
-
-    public static getDerivedStateFromError(error: Error): State {
-        return { hasError: true, error };
-    }
-
-    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+export function ErrorBoundary({ children }: ErrorBoundaryProps) {
+    const handleError = (error: Error, errorInfo: { componentStack: string }) => {
         console.error('Uncaught error:', error, errorInfo);
-    }
-
-    private handleReload = () => {
-        window.location.reload();
     };
 
-    public render() {
-        if (this.state.hasError) {
-            return (
-                <Box sx={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: '100vh',
-                    gap: 2,
-                    p: 3
-                }}>
-                    <Typography variant="h4" color="error">
-                        Something went wrong
-                    </Typography>
-                    <Typography color="text.secondary">
-                        {this.state.error?.message}
-                    </Typography>
-                    <Button 
-                        variant="contained" 
-                        onClick={this.handleReload}
-                    >
-                        Reload Page
-                    </Button>
-                </Box>
-            );
-        }
-
-        return this.props.children;
-    }
+    return (
+        <ReactErrorBoundary
+            FallbackComponent={ErrorFallback}
+            onError={handleError}
+            onReset={() => {
+                window.location.reload();
+            }}
+        >
+            {children}
+        </ReactErrorBoundary>
+    );
 } 

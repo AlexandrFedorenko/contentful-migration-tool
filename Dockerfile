@@ -3,28 +3,28 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Установка необходимых зависимостей для сборки
+# Install build dependencies
 RUN apk add --no-cache python3 make g++
 
-# Установка зависимостей
+# Install project dependencies
 COPY package*.json ./
 RUN npm install
 
-# Глобальная установка Contentful CLI
+# Install Contentful CLI globally
 RUN npm install -g contentful-cli
 
-# Копирование исходного кода
+# Copy source code
 COPY . .
 
-# Создание директории для бэкапов с правильными правами
+# Create backups directory with proper permissions
 RUN mkdir -p /app/backups && \
     chmod -R 777 /app/backups
 
-# Сборка приложения
+# Build application
 RUN npm run build
 
-# Экспорт портов
+# Expose port
 EXPOSE 3000
 
-# Запуск приложения
+# Start application
 CMD ["npm", "start"] 

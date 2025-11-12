@@ -46,7 +46,6 @@ export function getNotificationMessage(
 ): string {
     let message = NOTIFICATIONS[type][status];
     
-    // Заменяем плейсхолдеры на реальные значения
     Object.entries(params).forEach(([key, value]) => {
         message = message.replace(`{${key}}`, value);
     });

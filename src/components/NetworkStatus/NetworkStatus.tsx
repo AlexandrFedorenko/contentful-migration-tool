@@ -2,17 +2,26 @@ import React from 'react';
 import { Snackbar, Alert } from '@mui/material';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
-export function NetworkStatus() {
+const anchorOrigin = {
+    vertical: 'top' as const,
+    horizontal: 'center' as const,
+};
+
+const NetworkStatus = React.memo(() => {
     const isOnline = useNetworkStatus();
 
     return (
         <Snackbar
             open={!isOnline}
-            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            anchorOrigin={anchorOrigin}
         >
             <Alert severity="warning">
                 You are offline. Please check your internet connection.
             </Alert>
         </Snackbar>
     );
-} 
+});
+
+NetworkStatus.displayName = 'NetworkStatus';
+
+export { NetworkStatus }; 

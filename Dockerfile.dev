@@ -1,24 +1,24 @@
-# Dockerfile для разработки (Development)
+# Dockerfile for Development
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Установка необходимых зависимостей для сборки
+# Install build dependencies
 RUN apk add --no-cache python3 make g++
 
-# Установка зависимостей
+# Install project dependencies
 COPY package*.json ./
 RUN npm install
 
-# Глобальная установка Contentful CLI
+# Install Contentful CLI globally
 RUN npm install -g contentful-cli
 
-# Создание директории для бэкапов с правильными правами
+# Create backups directory with proper permissions
 RUN mkdir -p /app/backups && \
     chmod -R 777 /app/backups
 
-# Экспорт портов
+# Expose port
 EXPOSE 3000
 
-# Запуск в режиме разработки с поддержкой watch
+# Start in development mode with watch support
 CMD ["npm", "run", "dev:docker"] 

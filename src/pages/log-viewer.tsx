@@ -64,15 +64,13 @@ export default function LogViewer() {
         try {
           const parsed = JSON.parse(data.content);
           setLogData(parsed);
-        } catch (parseError) {
-          console.error('Error parsing JSON:', parseError);
+        } catch {
           setError('Invalid JSON format in log file');
         }
       } else {
         setError(data.error || 'Failed to load log file');
       }
-    } catch (fetchError) {
-      console.error('Error fetching log file:', fetchError);
+    } catch {
       setError('Failed to fetch log file');
     } finally {
       setLoading(false);
@@ -128,7 +126,7 @@ export default function LogViewer() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Header */}
+      
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button 
@@ -164,7 +162,7 @@ export default function LogViewer() {
 
       {logData && (
         <Box>
-          {/* Summary */}
+          
           {logData.importedEntities && (
             <Paper sx={{ p: 3, mb: 3, bgcolor: 'success.50' }}>
               <Typography variant="h6" color="success.main" sx={{ mb: 2 }}>
@@ -207,7 +205,6 @@ export default function LogViewer() {
             </Paper>
           )}
 
-          {/* Errors */}
           {logData.errors && logData.errors.length > 0 && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" color="error" sx={{ mb: 2 }}>
@@ -240,7 +237,7 @@ export default function LogViewer() {
             </Paper>
           )}
 
-          {/* Warnings */}
+          
           {logData.warnings && logData.warnings.length > 0 && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" color="warning.main" sx={{ mb: 2 }}>
@@ -263,7 +260,7 @@ export default function LogViewer() {
             </Paper>
           )}
 
-          {/* Raw JSON */}
+         
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               📄 Raw JSON Content

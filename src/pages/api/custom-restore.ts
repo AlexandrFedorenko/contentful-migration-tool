@@ -1,14 +1,23 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ContentfulCLI } from "@/utils/contentful-cli";
 import { ContentfulManagement } from "@/utils/contentful-management";
+import { CustomRestoreResponse } from "@/types/api";
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'cross-spawn';
 
-interface CustomRestoreResponse {
-  success: boolean;
-  error?: string;
-  backupFile?: string;
+interface CustomRestoreRequest {
+  spaceId: string;
+  targetEnvironment: string;
+  fileContent: string;
+}
+
+const BACKUP_DELAY = 2000;
+const DELETE_DELAY = 3000;
+const CREATE_DELAY = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export default async function handler(
@@ -20,7 +29,7 @@ export default async function handler(
   }
 
   try {
-    const { spaceId, targetEnvironment, fileContent } = req.body;
+    const { spaceId, targetEnvironment, fileContent }: CustomRestoreRequest = req.body;
 
     if (!spaceId || !targetEnvironment || !fileContent) {
       return res.status(400).json({ 
@@ -29,7 +38,6 @@ export default async function handler(
       });
     }
 
-    // Validate environment name (don't allow deleting master)
     if (targetEnvironment === 'master') {
       return res.status(400).json({ 
         success: false, 
@@ -37,59 +45,42 @@ export default async function handler(
       });
     }
 
-    // Save uploaded file temporarily in backups directory
-    const backupDir = path.join('/app/backups', spaceId);
+    const backupDir = path.join(process.cwd(), 'backups', spaceId);
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
+    
     const tempFilePath = path.join(backupDir, `custom-restore-${Date.now()}.json`);
     fs.writeFileSync(tempFilePath, fileContent);
 
-    // Get space name for backup naming
     const space = await ContentfulManagement.getSpace(spaceId);
     const spaceName = space?.name || spaceId;
 
     try {
-      // 1. Create backup of current environment
-      console.log(`Creating backup of current environment: ${targetEnvironment}`);
       const currentBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
       
-      if (!currentBackupResult.success) {
-        throw new Error(`Failed to create backup of current environment`);
+      if (!currentBackupResult.success || !currentBackupResult.backupFile) {
+        throw new Error('Failed to create backup of current environment');
       }
 
-      // Wait a bit to avoid rate limits
-      await sleep(2000);
+      await sleep(BACKUP_DELAY);
 
-      // 2. Check if environment exists before deleting
-      console.log(`Checking if environment ${targetEnvironment} exists...`);
       const environmentExists = await checkEnvironmentExists(spaceId, targetEnvironment);
       
       if (!environmentExists) {
         throw new Error(`Environment ${targetEnvironment} does not exist`);
       }
 
-      // 3. Delete the target environment
-      console.log(`Deleting environment: ${targetEnvironment}`);
       await deleteEnvironment(spaceId, targetEnvironment);
-
-      // Wait for deletion to complete
-      await sleep(3000);
-
-      // 4. Create new environment with the same name
-      console.log(`Creating new environment: ${targetEnvironment}`);
+      await sleep(DELETE_DELAY);
       await createEnvironment(spaceId, targetEnvironment);
-
-      // Wait for creation to complete
-      await sleep(2000);
-
-      // 5. Import the uploaded file to new environment
-      console.log(`Importing uploaded file to new environment: ${tempFilePath}`);
+      await sleep(CREATE_DELAY);
+      
       const fileName = path.basename(tempFilePath);
       const importResult = await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
       
       if (!importResult) {
-        throw new Error(`Failed to import backup`);
+        throw new Error('Failed to import backup');
       }
 
       return res.status(200).json({ 
@@ -98,16 +89,15 @@ export default async function handler(
       });
 
     } finally {
-      // Clean up temp file
       try {
-        fs.unlinkSync(tempFilePath);
-      } catch (cleanupError) {
-        console.warn('Failed to cleanup temp file:', cleanupError);
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      } catch {
       }
     }
 
   } catch (error) {
-    console.error('Custom restore error:', error);
     return res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error occurred' 
@@ -115,12 +105,6 @@ export default async function handler(
   }
 }
 
-// Utility function to sleep
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Check if environment exists
 async function checkEnvironmentExists(spaceId: string, environmentId: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const checkProcess = spawn('contentful', [
@@ -133,17 +117,19 @@ async function checkEnvironmentExists(spaceId: string, environmentId: string): P
 
     let output = '';
     
-    checkProcess.stdout.on('data', (data: Buffer) => {
-      output += data.toString();
-    });
+    if (checkProcess.stdout) {
+      checkProcess.stdout.on('data', (data: Buffer) => {
+        output += data.toString();
+      });
+    }
     
-    checkProcess.stderr.on('data', (data: Buffer) => {
-      console.error('Check environment error:', data.toString());
-    });
+    if (checkProcess.stderr) {
+      checkProcess.stderr.on('data', () => {
+      });
+    }
     
     checkProcess.on('close', (code: number) => {
       if (code === 0) {
-        // Check if environment exists in the list
         const exists = output.includes(environmentId);
         resolve(exists);
       } else {
@@ -153,7 +139,6 @@ async function checkEnvironmentExists(spaceId: string, environmentId: string): P
   });
 }
 
-// Delete environment
 async function deleteEnvironment(spaceId: string, environmentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const deleteProcess = spawn('contentful', [
@@ -165,23 +150,25 @@ async function deleteEnvironment(spaceId: string, environmentId: string): Promis
       shell: true
     });
 
-    // Automatically answer "yes" to confirmation
-    deleteProcess.stdin.write('y\n');
+    if (deleteProcess.stdin) {
+      deleteProcess.stdin.write('y\n');
+    }
     
     let output = '';
     
-    deleteProcess.stdout.on('data', (data: Buffer) => {
-      output += data.toString();
-      console.log('Delete output:', data.toString());
-    });
+    if (deleteProcess.stdout) {
+      deleteProcess.stdout.on('data', (data: Buffer) => {
+        output += data.toString();
+      });
+    }
     
-    deleteProcess.stderr.on('data', (data: Buffer) => {
-      console.error('Delete error:', data.toString());
-    });
+    if (deleteProcess.stderr) {
+      deleteProcess.stderr.on('data', () => {
+      });
+    }
     
     deleteProcess.on('close', (code: number) => {
       if (code === 0) {
-        console.log('Environment deleted successfully');
         resolve();
       } else {
         reject(new Error(`Failed to delete environment: ${output}`));
@@ -190,7 +177,6 @@ async function deleteEnvironment(spaceId: string, environmentId: string): Promis
   });
 }
 
-// Create environment
 async function createEnvironment(spaceId: string, environmentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const createProcess = spawn('contentful', [
@@ -205,18 +191,19 @@ async function createEnvironment(spaceId: string, environmentId: string): Promis
 
     let output = '';
     
-    createProcess.stdout.on('data', (data: Buffer) => {
-      output += data.toString();
-      console.log('Create output:', data.toString());
-    });
+    if (createProcess.stdout) {
+      createProcess.stdout.on('data', (data: Buffer) => {
+        output += data.toString();
+      });
+    }
     
-    createProcess.stderr.on('data', (data: Buffer) => {
-      console.error('Create error:', data.toString());
-    });
+    if (createProcess.stderr) {
+      createProcess.stderr.on('data', () => {
+      });
+    }
     
     createProcess.on('close', (code: number) => {
       if (code === 0) {
-        console.log('Environment created successfully');
         resolve();
       } else {
         reject(new Error(`Failed to create environment: ${output}`));

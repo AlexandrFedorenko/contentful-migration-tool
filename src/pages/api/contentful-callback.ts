@@ -1,87 +1,80 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+const CLOSE_WINDOW_DELAY = 2000;
+const REDIRECT_DELAY = 2000;
+const FALLBACK_REDIRECT_DELAY = 1000;
+
 export default function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Эта страница будет перенаправлять пользователя обратно в приложение
-  // с токеном в URL-фрагменте
-  
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Contentful Authentication</title>
       <script>
-        // Извлекаем токен из URL-фрагмента
+        const CLOSE_WINDOW_DELAY = ${CLOSE_WINDOW_DELAY};
+        const REDIRECT_DELAY = ${REDIRECT_DELAY};
+        const FALLBACK_REDIRECT_DELAY = ${FALLBACK_REDIRECT_DELAY};
+        
         function getTokenFromHash() {
-          // URL будет иметь формат #access_token=TOKEN&token_type=Bearer
           const hash = window.location.hash.substring(1);
-          console.log('Hash fragment:', hash);
-          
-          // Разбираем хэш-фрагмент
           const params = new URLSearchParams(hash);
-          const token = params.get('access_token');
-          
-          console.log('Extracted token:', token ? 'Found (hidden for security)' : 'Not found');
-          return token;
+          return params.get('access_token');
         }
         
-        // Отправляем токен обратно в основное приложение
+        function getErrorMessage() {
+          const searchParams = new URLSearchParams(window.location.search);
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          return searchParams.get('error_description') || 
+                 hashParams.get('error_description') ||
+                 'No token received';
+        }
+        
+        function closeWindow() {
+          try {
+            window.close();
+          } catch (e) {
+          }
+        }
+        
+        function redirectWithToken(token) {
+          window.location.href = '/?token=' + encodeURIComponent(token);
+        }
+        
+        function updateMessage(text) {
+          const messageEl = document.getElementById('message');
+          if (messageEl) {
+            messageEl.innerText = text;
+          }
+        }
+        
         window.onload = function() {
           try {
-            // Добавляем отладочную информацию
-            console.log('Callback page loaded');
-            console.log('URL:', window.location.href);
-            console.log('Hash:', window.location.hash);
-            
             const token = getTokenFromHash();
-            console.log('Token received:', token ? 'Yes (hidden for security)' : 'No');
             
             if (token) {
-              // Отправляем сообщение родительскому окну
               if (window.opener && !window.opener.closed) {
                 try {
-                  console.log('Sending message to opener');
                   window.opener.postMessage({ type: 'CONTENTFUL_AUTH_SUCCESS', token }, '*');
-                  document.getElementById('message').innerText = 'Authentication successful! You can close this window.';
-                  
-                  // Закрываем окно через 2 секунды
-                  setTimeout(() => {
-                    try {
-                      window.close();
-                    } catch (e) {
-                      console.error('Could not close window:', e);
-                    }
-                  }, 2000);
+                  updateMessage('Authentication successful! You can close this window.');
+                  setTimeout(closeWindow, CLOSE_WINDOW_DELAY);
                 } catch (err) {
-                  console.error('Error posting message to opener:', err);
-                  // Если не удалось отправить сообщение, перенаправляем на главную
-                  document.getElementById('message').innerText = 'Authentication successful, but could not communicate with main window. Redirecting...';
-                  setTimeout(() => {
-                    window.location.href = '/?token=' + encodeURIComponent(token);
-                  }, 2000);
+                  updateMessage('Authentication successful, but could not communicate with main window. Redirecting...');
+                  setTimeout(() => redirectWithToken(token), REDIRECT_DELAY);
                 }
               } else {
-                console.log('No opener found or opener closed, redirecting');
-                // Если нет родительского окна, перенаправляем на главную
-                document.getElementById('message').innerText = 'Authentication successful! Redirecting to main page...';
-                setTimeout(() => {
-                  window.location.href = '/?token=' + encodeURIComponent(token);
-                }, 1000);
+                updateMessage('Authentication successful! Redirecting to main page...');
+                setTimeout(() => redirectWithToken(token), FALLBACK_REDIRECT_DELAY);
               }
             } else {
-              // Проверяем, есть ли ошибка в URL
-              const errorMsg = new URLSearchParams(window.location.search).get('error_description') || 
-                              new URLSearchParams(window.location.hash.substring(1)).get('error_description') ||
-                              'No token received';
-              
-              console.error('Authentication failed:', errorMsg);
-              document.getElementById('message').innerText = 'Authentication failed: ' + errorMsg;
+              const errorMsg = getErrorMessage();
+              updateMessage('Authentication failed: ' + errorMsg);
             }
           } catch (err) {
-            console.error('Error in callback processing:', err);
-            document.getElementById('message').innerText = 'An error occurred while processing authentication: ' + (err instanceof Error ? err.message : String(err));
+            const errorText = err instanceof Error ? err.message : String(err);
+            updateMessage('An error occurred while processing authentication: ' + errorText);
           }
         };
       </script>

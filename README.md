@@ -1,181 +1,203 @@
-docker-compose up --build
 # Contentful Migration Tool
 
-Инструмент для создания бэкапов и миграции контента между окружениями Contentful.
+A professional tool for creating backups and migrating content between Contentful environments.
 
-## Возможности
+## Features
 
-- Авторизация в Contentful через браузер
-- Выбор пространства и окружений
-- Создание бэкапов контента
-- Миграция контента между окружениями
-- Просмотр истории бэкапов
+- Browser-based Contentful authentication
+- Space and environment selection
+- Content backup creation
+- Content migration between environments
+- Backup history viewing
+- Custom restore from backup files
+- Selective content type migration
+- Content analysis and comparison
 
-## Установка и запуск
+## Quick Start
 
-### Запуск с использованием Docker (рекомендуется)
+### For First-Time Users
 
-#### Вариант 1: Использование скриптов запуска (самый простой)
-
-На Linux/Mac:
+**Fastest way (with Docker):**
 ```bash
-# Сделайте скрипт исполняемым
-chmod +x start.sh
-
-# Запустите скрипт
-./start.sh
+git clone https://github.com/your-username/contentful-migration-tool.git
+cd contentful-migration-tool
+docker-compose up -d
+# Open http://localhost:3000
 ```
 
-На Windows:
+**Local installation:**
 ```bash
-start.bat
+git clone https://github.com/your-username/contentful-migration-tool.git
+cd contentful-migration-tool
+npm run setup
+npm run dev
+# Open http://localhost:3000
 ```
 
-#### Вариант 2: Использование Docker Compose напрямую
+---
 
-1. Убедитесь, что у вас установлены [Docker](https://docs.docker.com/get-docker/) и [Docker Compose](https://docs.docker.com/compose/install/)
+## Installation & Setup
 
-2. Клонируйте репозиторий:
+Choose one of the installation methods below. **Docker is recommended** for easier setup and consistent environment.
+
+### Option 1: Docker (Recommended)
+
+#### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+#### Quick Start
+
+1. Clone the repository:
    ```bash
    git clone https://github.com/your-username/contentful-migration-tool.git
    cd contentful-migration-tool
    ```
 
-3. Создайте файл `.env` (опционально):
+2. Create `.env` file (optional):
    ```bash
-   # Contentful Management Token (опционально)
+   # Contentful Management Token (optional)
    CONTENTFUL_MANAGEMENT_TOKEN=your_token_here
    ```
 
-4. Запустите приложение:
+3. Start the application:
    ```bash
    docker-compose up -d
    ```
 
-5. Откройте http://localhost:3000 в браузере
+4. Open http://localhost:3000 in your browser
 
-#### Вариант 3: Использование npm-скриптов
+#### Using npm scripts
 
 ```bash
-# Сборка Docker-образа
+# Build Docker image
 npm run docker:build
 
-# Запуск контейнеров
+# Start containers
 npm run docker:start
 
-# Остановка контейнеров
+# Stop containers
 npm run docker:stop
+
+# Development mode with watch
+npm run docker:dev
 ```
 
-### Локальная установка (альтернативный вариант)
+### Option 2: Local Installation (Without Docker)
 
-1. Убедитесь, что у вас установлены:
-   - Node.js 16+
-   - npm 7+
-   - Contentful CLI (`npm install -g contentful-cli`)
+#### Prerequisites
+- **Node.js 18+** - [Download Node.js](https://nodejs.org/)
+- **npm 7+** (comes with Node.js)
+- **Git** - [Download Git](https://git-scm.com/)
 
-2. Клонируйте репозиторий и установите зависимости:
+#### Step-by-Step Setup
+
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/your-username/contentful-migration-tool.git
    cd contentful-migration-tool
-   npm install
    ```
 
-3. Создайте директорию для бэкапов:
+2. **Run the setup script** (automatically installs dependencies and configures the project):
    ```bash
-   mkdir -p backups
+   npm run setup
    ```
+   
+   This script will:
+   - ✅ Install all project dependencies (`npm install`)
+   - ✅ Check and install Contentful CLI globally (if not already installed)
+   - ✅ Create the `backups/` directory for storing backups
+   - ✅ Create a `.env` file template (if it doesn't exist)
 
-4. Запустите приложение:
+3. **Configure environment variables** (optional):
+   
+   Edit the `.env` file and add your Contentful Management Token:
+   ```bash
+   # Contentful Management Token (optional)
+   CONTENTFUL_MANAGEMENT_TOKEN=your_token_here
+   ```
+   
+   > **Note:** You can also authenticate through the browser UI after starting the application.
+
+4. **Start the development server:**
    ```bash
    npm run dev
    ```
 
-5. Откройте http://localhost:3000 в браузере
+5. **Open your browser:**
+   
+   Navigate to: **http://localhost:3000**
 
-## Управление приложением
+#### Manual Setup (Alternative)
 
-### Остановка приложения
+If you prefer to set up manually without the setup script:
 
 ```bash
-# Через npm-скрипт
+# 1. Install dependencies
+npm install
+
+# 2. Install Contentful CLI globally
+npm install -g contentful-cli
+
+# 3. Create backups directory
+mkdir -p backups
+
+# 4. Create .env file (optional)
+echo "# Contentful Management Token (optional)
+# CONTENTFUL_MANAGEMENT_TOKEN=your_token_here" > .env
+
+# 5. Start the application
+npm run dev
+```
+
+## Application Management
+
+### Stop Application
+
+```bash
+# Using npm script
 npm run docker:stop
 
-# Или напрямую
+# Or directly
 docker-compose down
 ```
 
-### Просмотр логов
+### View Logs
 
 ```bash
 docker-compose logs -f
 ```
 
-## Настройка
+## Configuration
 
-Для использования токена Contentful Management API, добавьте его в файл `.env`:
+To use Contentful Management API token, add it to `.env` file:
 
 ```
 CONTENTFUL_MANAGEMENT_TOKEN=your_token_here
 ```
 
-## Требования
+## Requirements
 
-- Docker и Docker Compose (для запуска через Docker)
-- Или Node.js 16+ и npm 7+ (для локальной установки)
+- Docker and Docker Compose (for Docker setup)
+- Or Node.js 18+ and npm 7+ (for local installation)
 
-## Использование
+## Usage
 
-1. Авторизуйтесь в Contentful, нажав на кнопку "Login to Contentful"
-2. Выберите пространство из выпадающего списка
-3. Выберите исходное и целевое окружения
-4. Для создания бэкапа нажмите "Backup Source"
-5. Для миграции контента нажмите "Migrate Content"
+1. Authenticate with Contentful by clicking "Login to Contentful"
+2. Select a space from the dropdown
+3. Select source and target environments
+4. Click "Backup Source" to create a backup
+5. Click "Migrate Content" to migrate content between environments
+6. Use "Custom Restore" to restore from a backup file
+7. Use "Custom Migrate" to selectively migrate specific content types
 
-## Бэкапы
+## Backups
 
-Бэкапы сохраняются в директории `backups/{space_id}/` в формате JSON.
+Backups are saved in `backups/{space_id}/` directory in JSON format.
 
-## Лицензия
+## Features Details
 
-MIT
-
-## 🚀 Installation & Setup
-
-### 1. Clone the Repository
-```sh
- git clone https://github.com/AlexandrFedorenko/contentful-migration-tool
- cd contentful-migration-tool
-```
-
-### 2. Install Dependencies
-```sh
- npm install
-```
-
-### 3. Set Up Environment Variables
-Create a `.env.local` file in the root directory and add the following Contentful API keys:
-
-```ini
-NEXT_PUBLIC_CONTENTFUL_MANAGEMENT_TOKEN=your_management_token
-NEXT_PUBLIC_CONTENTFUL_CDA_TOKEN=your_cda_token
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-#### Where to Get API Keys?
-- **Management Token**: Get it from [Contentful API Keys](https://app.contentful.com/) → "Content Management API"
-- **CDA Token**: Get it from "Content Delivery API" in Contentful settings
-
-### 4. Start the Application
-```sh
-npm run dev
-```
-The application will be available at `http://localhost:3000`
-
----
-
-## 📌 Features
-### ✅ Full Content Backup
+### Full Content Backup
 Backup all Contentful data including:
 - Entries
 - Content Types
@@ -183,28 +205,24 @@ Backup all Contentful data including:
 - Locales
 - Webhooks
 
-### ✅ Migration Between Environments
+### Migration Between Environments
 Migrate content from one environment (e.g., `master`) to another (e.g., `dev`).
 - **Standard Migration**: Copies all content
-- **Advanced Migration**: Creates a DIFF file to copy only new and modified entries
+- **Custom Migration**: Selectively migrate specific content types and entries
 
-### ✅ Restore Content from Backup
-Restore Contentful content from a previous backup.
+### Restore Content from Backup
+Restore Contentful content from a previous backup file.
 
-### ✅ Delete Backups
+### Delete Backups
 Remove old backups directly from the UI.
 
----
+## Important: Backup Before Production Migration
 
-
-
-## ⚠️ Important: Backup Before Production Migration
 Before migrating content to production, always create a full backup using this guide:
 [Contentful CLI Backup Guide](https://rohitgupta.netlify.app/import-and-export-data-with-contentful-cli)
 
----
+## Troubleshooting & Common Issues
 
-## 🛠 Troubleshooting & Common Issues
 | Error | Cause | Solution |
 |----------------------|--------------------------------------------------|--------------------------------------------------|
 | The content type could not be found | Content Type is missing in the target environment | Manually transfer Content Types first |
@@ -212,38 +230,38 @@ Before migrating content to production, always create a full backup using this g
 | Asset already exists | Duplicate asset during import | Delete the existing asset and retry |
 | Some entries failed to import | Content Type structure changed | Ensure the Content Type exists and is unchanged |
 
----
+## For Developers
 
-## 📜 License
-This project is licensed under the MIT License.
-
-## 📧 Contact
-For issues or feature requests, open an issue in the repository or contact the maintainer.
-
-## Для разработчиков
-
-### Запуск в режиме разработки с Docker
+### Development Mode with Docker
 
 ```bash
-# Запуск с автоматической перезагрузкой при изменениях
+# Start with automatic reload on changes
 npm run docker:dev
 
-# Или с пересборкой образа
+# Or with image rebuild
 npm run docker:dev:build
 ```
 
-### Локальная разработка без Docker
+### Local Development without Docker
 
 ```bash
 npm install
 npm run dev
 ```
 
-### Структура проекта
+### Project Structure
 
-- `src/pages/api/` - API маршруты Next.js
-- `src/utils/` - Утилиты для работы с Contentful
-- `src/components/` - React-компоненты
-- `src/hooks/` - React-хуки
-- `src/context/` - Контекст приложения
-- `backups/` - Директория для хранения бэкапов
+- `src/pages/api/` - Next.js API routes
+- `src/utils/` - Contentful utilities
+- `src/components/` - React components
+- `src/hooks/` - React hooks
+- `src/context/` - Application context
+- `backups/` - Backup storage directory
+
+## License
+
+MIT
+
+## Contact
+
+For issues or feature requests, open an issue in the repository or contact the maintainer.

@@ -1,10 +1,10 @@
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const CACHE_FILE = path.join(process.cwd(), '.auth-cache.json');
 
 export interface AuthCacheData {
-  status: any;
+  status: unknown;
   timestamp: number;
 }
 
@@ -15,8 +15,7 @@ export const authCache = {
         const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
         return data;
       }
-    } catch (error) {
-      console.error('Error reading auth cache:', error);
+    } catch {
     }
     return { status: null, timestamp: 0 };
   },
@@ -24,8 +23,7 @@ export const authCache = {
   set(data: AuthCacheData): void {
     try {
       fs.writeFileSync(CACHE_FILE, JSON.stringify(data), 'utf8');
-    } catch (error) {
-      console.error('Error writing auth cache:', error);
+    } catch {
     }
   },
   
@@ -34,8 +32,7 @@ export const authCache = {
       if (fs.existsSync(CACHE_FILE)) {
         fs.unlinkSync(CACHE_FILE);
       }
-    } catch (error) {
-      console.error('Error resetting auth cache:', error);
+    } catch {
     }
   }
 }; 

@@ -1,32 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ContentfulCLI } from '@/utils/contentful-cli';
 import { authCache } from '@/utils/auth-cache';
-import crypto from 'crypto';
+import { resetAuthCache } from './check-auth';
 
 interface ContentfulAuthBrowserResponse {
     success: boolean;
     message?: string;
     authUrl?: string;
+    browser_url?: string;
     token?: string;
 }
 
-// Генерация случайного client_id
-const generateClientId = () => {
-  return crypto.randomBytes(16).toString('hex');
-};
+type AuthAction = 'getAuthUrl' | 'saveToken' | 'logout' | 'start-login';
 
-// Базовый URL для авторизации Contentful
-const CONTENTFUL_AUTH_URL = 'https://be.contentful.com/oauth/authorize';
-
-// Сбрасываем кэш авторизации при логине/логауте
-const invalidateAuthCache = () => {
-    // Импортируем динамически, чтобы избежать циклических зависимостей
-    import('./check-auth').then(module => {
-        if (module.authCache) {
-            module.authCache.reset();
-        }
-    }).catch(err => console.error('Failed to invalidate auth cache:', err));
-};
+interface AuthRequestBody {
+    action: AuthAction;
+    token?: string;
+}
 
 export default async function handler(
     req: NextApiRequest,
@@ -40,33 +30,33 @@ export default async function handler(
     }
 
     try {
-        const { action, token } = req.body;
+        const { action, token }: AuthRequestBody = req.body;
 
-        if (action === 'getAuthUrl') {
-            try {
-                // Используем ContentfulCLI для получения URL авторизации
-                const authUrlResult = await ContentfulCLI.getAuthUrl();
-                
-                if (!authUrlResult || !authUrlResult.browser_url) {
-                    throw new Error('Failed to get auth URL from Contentful CLI');
-                }
-                
-                console.log('Generated auth URL from CLI:', authUrlResult.browser_url);
-                
-                return res.status(200).json({
-                    success: true,
-                    authUrl: authUrlResult.browser_url
-                });
-            } catch (error) {
-                console.error('Error getting auth URL from CLI:', error);
+        if (!action) {
+            return res.status(400).json({
+                success: false,
+                message: 'Action is required'
+            });
+        }
+
+        if (action === 'getAuthUrl' || action === 'start-login') {
+            const authUrlResult = await ContentfulCLI.getAuthUrl();
+            
+            if (!authUrlResult?.browser_url) {
                 return res.status(500).json({
                     success: false,
-                    message: error instanceof Error ? error.message : 'Failed to get auth URL'
+                    message: 'Failed to get auth URL from Contentful CLI'
                 });
             }
+            
+            return res.status(200).json({
+                success: true,
+                authUrl: authUrlResult.browser_url,
+                browser_url: authUrlResult.browser_url
+            });
         } 
-        else if (action === 'saveToken') {
-            // Сохраняем токен
+        
+        if (action === 'saveToken') {
             if (!token) {
                 return res.status(400).json({
                     success: false,
@@ -74,27 +64,22 @@ export default async function handler(
                 });
             }
             
-            // Сохраняем токен в переменную окружения
             process.env.CONTENTFUL_MANAGEMENT_TOKEN = token;
             await ContentfulCLI.saveToken(token);
-            // Сбрасываем кэш авторизации
             authCache.reset();
+            resetAuthCache();
             
             return res.status(200).json({
                 success: true,
                 message: 'Token saved successfully'
             });
         } 
-        else if (action === 'logout') {
-            console.log('Processing logout request...');
-            
-            // Выполняем выход
+        
+        if (action === 'logout') {
             const success = await ContentfulCLI.logout();
-            
-            // Сбрасываем кэш авторизации
             authCache.reset();
+            resetAuthCache();
             
-            // Очищаем куки, если они используются
             res.setHeader('Set-Cookie', [
                 'contentful_token=; Path=/; Max-Age=0',
                 'contentful_logged_in=; Path=/; Max-Age=0'
@@ -107,11 +92,15 @@ export default async function handler(
                     : 'Logout process may not have completed successfully, but cache was cleared'
             });
         }
+
+        return res.status(400).json({
+            success: false,
+            message: `Unknown action: ${action}`
+        });
     } catch (error) {
-        console.error('Error processing request:', error);
         return res.status(500).json({
             success: false,
-            message: 'An error occurred while processing the request'
+            message: error instanceof Error ? error.message : 'An error occurred while processing the request'
         });
     }
 }

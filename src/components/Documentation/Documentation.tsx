@@ -1,5 +1,4 @@
-import React from "react";
-import { useState } from "react";
+import React from 'react';
 import {
     Container,
     Typography,
@@ -7,33 +6,29 @@ import {
     Tabs,
     Tab,
     Paper,
-    TableContainer,
-    Table,
-    TableHead,
-    TableRow,
-    TableCell,
-    TableBody,
-} from "@mui/material";
-import BackupIcon from "@mui/icons-material/Backup";
-import WarningIcon from "@mui/icons-material/Warning";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import TerminalIcon from "@mui/icons-material/Terminal";
+} from '@mui/material';
+import BackupIcon from '@mui/icons-material/Backup';
+import WarningIcon from '@mui/icons-material/Warning';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import { useDocumentationTabs, TabIndex } from '@/hooks/useDocumentationTabs';
+import ContentfulOverview from './ContentfulOverview';
+import CLIInstallation from './CLIInstallation';
+import HowItWorks from './HowItWorks';
+import ErrorHandling from './ErrorHandling';
+import ProductionWarning from './ProductionWarning';
 
-// Импортируем наш кастомный хук
-import { useDocumentationTabs, TabIndex } from "@/hooks/useDocumentationTabs";
-
-// =============================
-// Компонент Documentation
-// =============================
 const Documentation: React.FC = () => {
-    // Вместо локального useState → кастомный хук
     const { tabIndex, handleTabChange } = useDocumentationTabs(TabIndex.CONTENTFUL);
 
     return (
-        <Container maxWidth="lg" sx={{ mt: 5 }}>
+        <Container maxWidth="lg" sx={{ mt: 5, mb: 5 }}>
             <Typography variant="h3" textAlign="center" gutterBottom>
-                📖 Documentation on Contentful and Data Migration
+                Documentation
+            </Typography>
+            <Typography variant="subtitle1" textAlign="center" color="text.secondary" sx={{ mb: 4 }}>
+                Complete guide to using Contentful Migration Tool
             </Typography>
 
             <Paper elevation={3} sx={{ mb: 3 }}>
@@ -42,20 +37,21 @@ const Documentation: React.FC = () => {
                     onChange={handleTabChange}
                     indicatorColor="primary"
                     textColor="primary"
-                    variant="fullWidth"
+                    variant="scrollable"
+                    scrollButtons="auto"
                 >
-                    <Tab icon={<LibraryBooksIcon />} label="Contentful" />
-                    <Tab icon={<TerminalIcon />} label="Installing Contentful-CLI" />
-                    <Tab icon={<BackupIcon />} label="How it works" />
-                    <Tab icon={<ErrorOutlineIcon />} label="Errors and Solutions" />
-                    <Tab icon={<WarningIcon />} label="Transfer to Production" />
+                    <Tab icon={<LibraryBooksIcon />} iconPosition="start" label="Contentful Overview" />
+                    <Tab icon={<TerminalIcon />} iconPosition="start" label="CLI Installation" />
+                    <Tab icon={<BackupIcon />} iconPosition="start" label="How It Works" />
+                    <Tab icon={<ErrorOutlineIcon />} iconPosition="start" label="Errors & Solutions" />
+                    <Tab icon={<WarningIcon />} iconPosition="start" label="Production Safety" />
                 </Tabs>
             </Paper>
 
-            <Box sx={{ p: 3 }}>
+            <Box>
                 {tabIndex === TabIndex.CONTENTFUL && <ContentfulOverview />}
-                {tabIndex === TabIndex.CLI_INSTALLATION && <InstallContentfulCLI />}
-                {tabIndex === TabIndex.HOW_IT_WORKS && <BackupGuide />}
+                {tabIndex === TabIndex.CLI_INSTALLATION && <CLIInstallation />}
+                {tabIndex === TabIndex.HOW_IT_WORKS && <HowItWorks />}
                 {tabIndex === TabIndex.ERRORS_SOLUTIONS && <ErrorHandling />}
                 {tabIndex === TabIndex.PRODUCTION_TRANSFER && <ProductionWarning />}
             </Box>
@@ -64,81 +60,3 @@ const Documentation: React.FC = () => {
 };
 
 export default Documentation;
-
-// =============================
-// Описание отдельных компонентов
-// =============================
-
-// Контент по Contentful
-const ContentfulOverview: React.FC = () => {
-    return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                🚀 How Contentful Works
-            </Typography>
-            <Typography sx={{ mb: 2 }}>
-                Contentful is a <strong>headless CMS</strong> where content is organized into <strong>Content Types</strong> (data models) consisting of <strong>Entries</strong> (records).
-                All data is stored in <strong>Environments</strong>, allowing you to work with different content versions.
-            </Typography>
-        </Box>
-    );
-};
-
-// Инструкция по установке Contentful CLI
-const InstallContentfulCLI: React.FC = () => {
-    return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                🛠 Installing Contentful-CLI
-            </Typography>
-            <Typography>
-                Run the following command to install Contentful CLI globally:
-            </Typography>
-            <Box component="pre" sx={{ backgroundColor: "#f4f4f4", p: 2, borderRadius: 2 }}>
-                npm install -g contentful-cli
-            </Box>
-        </Box>
-    );
-};
-
-// Гид по бэкапам
-const BackupGuide: React.FC = () => {
-    return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                🔄 How Our Backup System Works
-            </Typography>
-            <Typography>
-                Our system allows you to create, restore, and delete backups for your Contentful spaces.
-            </Typography>
-        </Box>
-    );
-};
-
-// Ошибки и их решения
-const ErrorHandling: React.FC = () => {
-    return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                ⚠️ Errors and Solutions
-            </Typography>
-            <Typography>
-                Here are the most common migration errors and how to solve them.
-            </Typography>
-        </Box>
-    );
-};
-
-// Предупреждение о переносе на продакшн
-const ProductionWarning: React.FC = () => {
-    return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" color="error" gutterBottom>
-                ⚠️ Warning: Create a Backup Before Migrating to Production!
-            </Typography>
-            <Typography>
-                Before migrating data to the production environment, make sure to back up all environments.
-            </Typography>
-        </Box>
-    );
-};

@@ -1,95 +1,52 @@
 import { spawn } from 'cross-spawn';
-import { v4 as uuidv4 } from 'uuid';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import os from 'os';
-import { existsSync } from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import * as os from 'os';
 
-const execAsync = promisify(exec);
+const CONTENTFUL_OAUTH_CLIENT_ID = process.env.CONTENTFUL_OAUTH_CLIENT_ID || '9f86a1d54f3d6f85c159468f5919d6e5d27716b3ed68fd01bd534e3dea2df864';
+const CONTENTFUL_OAUTH_REDIRECT_URI = process.env.CONTENTFUL_OAUTH_REDIRECT_URI || 'https://www.contentful.com/developers/cli-oauth-page/';
+const CONTENTFUL_OAUTH_SCOPE = process.env.CONTENTFUL_OAUTH_SCOPE || 'content_management_manage';
 
-// Путь к локальному исполняемому файлу contentful
-const contentfulPath = path.join(process.cwd(), 'node_modules', '.bin', 'contentful');
-
-/**
- * Утилита для работы с Contentful CLI
- */
 export class ContentfulCLI {
-  /**
-   * Получает URL для авторизации через браузер
-   */
   static async getAuthUrl(): Promise<{ browser_url: string }> {
-    try {
-      // Вместо запуска CLI, создаем URL напрямую
-      // Используем официальный client_id из Contentful CLI
-      const clientId = '9f86a1d54f3d6f85c159468f5919d6e5d27716b3ed68fd01bd534e3dea2df864';
-      const redirectUri = 'https://www.contentful.com/developers/cli-oauth-page/';
-      const scope = 'content_management_manage';
-      
-      // Формируем URL для авторизации
-      const authUrl = `https://be.contentful.com/oauth/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}`;
-      
-      console.log('Generated auth URL:', authUrl);
-      
-      return { browser_url: authUrl };
-    } catch (error) {
-      console.error('Error generating auth URL:', error);
-      throw error;
-    }
+    const authUrl = `https://be.contentful.com/oauth/authorize?response_type=token&client_id=${CONTENTFUL_OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(CONTENTFUL_OAUTH_REDIRECT_URI)}&scope=${CONTENTFUL_OAUTH_SCOPE}`;
+    
+    return { browser_url: authUrl };
   }
   
-  /**
-   * Сохраняет токен в конфигурации Contentful CLI
-   */
   static async saveToken(token: string): Promise<boolean> {
-    try {
-      console.log('Saving token to Contentful CLI config...');
-      
-      const cliProcess = spawn('contentful', ['config', 'add', '--management-token', token], { 
-        stdio: 'pipe',
-        shell: true
+    const cliProcess = spawn('contentful', ['config', 'add', '--management-token', token], { 
+      stdio: 'pipe',
+      shell: true
+    });
+    
+    return new Promise((resolve, reject) => {
+      cliProcess.on('close', (code: number) => {
+        if (code === 0) {
+          resolve(true);
+        } else {
+          reject(new Error(`Failed to save token, exit code: ${code}`));
+        }
       });
       
-      return new Promise((resolve, reject) => {
-        cliProcess.on('close', (code: number) => {
-          if (code === 0) {
-            console.log('Token saved successfully');
-            resolve(true);
-          } else {
-            console.error('Failed to save token, exit code:', code);
-            reject(new Error(`Failed to save token, exit code: ${code}`));
-          }
+      if (cliProcess.stderr) {
+        cliProcess.stderr.on('data', () => {
         });
-        
-        cliProcess.stderr.on('data', (data: Buffer) => {
-          console.error('Error saving token:', data.toString());
-        });
-      });
-    } catch (error) {
-      console.error('Error saving token:', error);
-      throw error;
-    }
+      }
+    });
   }
   
-  /**
-   * Проверяет статус авторизации
-   */
   static async checkAuthStatus(): Promise<{ loggedIn: boolean; config?: string }> {
     try {
-      console.log('Checking Contentful CLI auth status...');
-      
-      // Проверяем наличие токена в переменных окружения
       const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
       if (token) {
-        console.log('Token found in environment variables');
         return { 
           loggedIn: true,
           config: `managementToken: ${token.substring(0, 5)}...`
         };
       }
       
-      // Проверяем конфигурацию CLI
       const checkProcess = spawn('contentful', ['config', 'list'], { 
         stdio: 'pipe',
         shell: true
@@ -98,15 +55,16 @@ export class ContentfulCLI {
       return new Promise((resolve, reject) => {
         let output = '';
         
-        checkProcess.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-        });
+        if (checkProcess.stdout) {
+          checkProcess.stdout.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+        }
         
         checkProcess.on('close', (code: number) => {
           if (code === 0) {
             const isLoggedIn = output.includes('managementToken');
             
-            // Если токен найден, сохраняем его в переменных окружения
             if (isLoggedIn) {
               const tokenMatch = output.match(/managementToken: ([^\s]+)/);
               if (tokenMatch) {
@@ -119,125 +77,80 @@ export class ContentfulCLI {
               config: isLoggedIn ? output : undefined
             });
           } else {
-            console.error('Failed to check auth status, exit code:', code);
             resolve({ loggedIn: false });
           }
         });
         
-        // Устанавливаем таймаут
         setTimeout(() => {
           checkProcess.kill();
-          console.log('Timeout checking auth status');
           resolve({ loggedIn: false });
         }, 5000);
       });
-    } catch (error) {
-      console.error('Error checking auth status:', error);
+    } catch {
       return { loggedIn: false };
     }
   }
   
-  /**
-   * Проверка наличия Contentful CLI
-   */
   static isContentfulCliAvailable(): boolean {
     try {
-      // Проверяем локальную установку
       const localPath = path.join(process.cwd(), 'node_modules', '.bin', 'contentful');
-      if (existsSync(localPath)) {
+      if (fs.existsSync(localPath)) {
         return true;
       }
       
-      // Проверяем глобальную установку (только для Linux/Mac)
       if (process.platform !== 'win32') {
-        const result = spawn.sync('which', ['contentful'], { stdio: 'pipe' });
+        const result = spawnSync('which', ['contentful'], { stdio: 'pipe' });
         return result.status === 0;
       }
       
-      // Для Windows
-      const result = spawn.sync('where', ['contentful'], { stdio: 'pipe', shell: true });
+      const result = spawnSync('where', ['contentful'], { stdio: 'pipe', shell: true });
       return result.status === 0;
-    } catch (error) {
-      console.error('Error checking for Contentful CLI:', error);
+    } catch {
       return false;
     }
   }
   
-  /**
-   * Очищает старые JSON файлы логов, оставляя только последние 5
-   */
-
-
-  /**
-   * Выход из Contentful CLI
-   */
   static async logout(): Promise<boolean> {
-    console.log('Logging out from Contentful CLI...');
-    
-    // Удаляем токен из переменных окружения
     if (process.env.CONTENTFUL_MANAGEMENT_TOKEN) {
       delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;
-      console.log('Removed token from environment variables');
     }
     
-    // Удаляем файл конфигурации - это самый надежный способ
     const configRemoved = await this.removeConfigFile();
     
-    // Очищаем кэш авторизации
     try {
       const authCachePath = path.join(process.cwd(), '.auth-cache.json');
       if (fs.existsSync(authCachePath)) {
         fs.unlinkSync(authCachePath);
-        console.log('Auth cache file removed');
       }
-    } catch (error) {
-      console.error('Error removing auth cache file:', error);
+    } catch {
     }
     
     return configRemoved;
   }
   
-  /**
-   * Удаление файла конфигурации Contentful
-   */
   private static async removeConfigFile(): Promise<boolean> {
     try {
-      // Путь к файлу конфигурации Contentful
       const configPath = path.join(os.homedir(), '.contentfulrc.json');
       
-      // Проверяем существование файла
       if (fs.existsSync(configPath)) {
-        // Удаляем файл
         fs.unlinkSync(configPath);
-        console.log('Contentful config file removed successfully');
-        return true;
-      } else {
-        console.log('Contentful config file not found, considering logout successful');
         return true;
       }
-    } catch (error) {
-      console.error('Error removing Contentful config:', error);
+      return true;
+    } catch {
       return false;
     }
   }
   
-  /**
-   * Создает бэкап пространства и окружения
-   */
   static async createBackup(spaceId: string, environmentId: string, spaceName?: string): Promise<{ success: boolean; backupFile?: string }> {
     try {
-      console.log(`Creating backup for space ${spaceId} (${spaceName || spaceId}), environment ${environmentId}...`);
-      
-      // Создаем директорию для бэкапов
       const backupDir = path.join(process.cwd(), 'backups', spaceId);
       fs.mkdirSync(backupDir, { recursive: true });
       
-      // Генерируем имя файла с временной меткой
       const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-      const safeSpaceName = (spaceName || spaceId).replace(/[^a-zA-Z0-9-_]/g, '_'); // Заменяем спецсимволы на подчеркивания
+      const safeSpaceName = (spaceName || spaceId).replace(/[^a-zA-Z0-9-_]/g, '_');
       const backupFile = path.join(backupDir, `backup-${safeSpaceName}-${environmentId}-${timestamp}.json`);
       
-      // Команда для экспорта
       const exportProcess = spawn('contentful', [
         'space', 'export',
         '--space-id', spaceId,
@@ -251,64 +164,48 @@ export class ContentfulCLI {
         shell: true
       });
       
-      // Автоматически отвечаем "yes" на все вопросы
-      exportProcess.stdin.write('y\ny\ny\ny\ny\n');
+      if (exportProcess.stdin) {
+        exportProcess.stdin.write('y\ny\ny\ny\ny\n');
+      }
       
       return new Promise((resolve, reject) => {
         let output = '';
         
-        exportProcess.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-          console.log('Backup output:', data.toString());
-        });
+        if (exportProcess.stdout) {
+          exportProcess.stdout.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+        }
         
-        exportProcess.stderr.on('data', (data: Buffer) => {
-          console.error('Backup error:', data.toString());
-        });
+        if (exportProcess.stderr) {
+          exportProcess.stderr.on('data', () => {
+          });
+        }
         
         exportProcess.on('close', (code: number) => {
           if (code === 0) {
-            console.log('Backup created successfully');
             resolve({
               success: true,
               backupFile: path.basename(backupFile)
             });
           } else {
-            console.error('Failed to create backup, exit code:', code);
             reject(new Error(`Failed to create backup: ${output}`));
           }
         });
       });
     } catch (error) {
-      console.error('Error creating backup:', error);
       throw error;
     }
   }
   
-  /**
-   * Восстанавливает бэкап в указанное окружение
-   */
   static async restoreBackup(spaceId: string, fileName: string, targetEnvironment: string): Promise<boolean> {
-    console.log('🔍 DEBUG: restoreBackup function STARTED');
-    console.log('🔍 DEBUG: Parameters:', { spaceId, fileName, targetEnvironment });
-    console.log('🔍 DEBUG: Current working directory:', process.cwd());
-    console.log('🔍 DEBUG: Available files in /app/:', fs.readdirSync('/app'));
-    
     try {
-      console.log('🔍 DEBUG: restoreBackup function called');
-      console.log(`Restoring backup ${fileName} to space ${spaceId}, environment ${targetEnvironment}...`);
-      
-      // Полный путь к файлу бэкапа
       const backupFile = path.join(process.cwd(), 'backups', spaceId, fileName);
-      console.log('🔍 DEBUG: Backup file path:', backupFile);
       
       if (!fs.existsSync(backupFile)) {
         throw new Error(`Backup file not found: ${backupFile}`);
       }
       
-      console.log('🔍 DEBUG: Backup file exists, proceeding with import...');
-      
-      // Команда для импорта
       const importProcess = spawn('contentful', [
         'space', 'import',
         '--space-id', spaceId,
@@ -319,89 +216,62 @@ export class ContentfulCLI {
         shell: true
       });
       
-      // Автоматически отвечаем "yes" на все вопросы
-      importProcess.stdin.write('y\ny\ny\ny\ny\n');
+      if (importProcess.stdin) {
+        importProcess.stdin.write('y\ny\ny\ny\ny\n');
+      }
       
       return new Promise((resolve, reject) => {
         let output = '';
         let errorOutput = '';
         
-        importProcess.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-          console.log('Restore output:', data.toString());
-        });
+        if (importProcess.stdout) {
+          importProcess.stdout.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+        }
         
-        importProcess.stderr.on('data', (data: Buffer) => {
-          errorOutput += data.toString();
-          console.error('Restore error:', data.toString());
-        });
+        if (importProcess.stderr) {
+          importProcess.stderr.on('data', (data: Buffer) => {
+            errorOutput += data.toString();
+          });
+        }
         
         importProcess.on('close', async (code: number) => {
-          console.log('Process closed with code:', code);
-          console.log('Output length:', output.length);
-          console.log('Error output length:', errorOutput.length);
-          
           if (code === 0) {
-            console.log('Backup restored successfully');
             resolve(true);
           } else {
-            console.error('Failed to restore backup, exit code:', code);
-            console.log('🔍 DEBUG: Processing error case');
-            
-            // Объединяем stdout и stderr для поиска JSON файла
             const fullOutput = output + errorOutput;
             
-            // Ищем JSON файл с детальным логом
-            console.log('Searching for JSON log pattern in output...');
-            console.log('Full output preview:', fullOutput.substring(0, 500));
-            
-            // Ждем 5 секунд, чтобы файл успел создаться
-            console.log('Waiting 5 seconds for JSON log file to be created...');
             await new Promise(resolve => setTimeout(resolve, 5000));
             
-            // Ищем файлы с contentful-import-error-log в названии
             let jsonLogPath = null;
             try {
               const appFiles = fs.readdirSync('/app');
-              console.log('Available files in /app/:', appFiles);
-              
               const jsonLogFile = appFiles.find(file => 
                 file.includes('contentful-import-error-log') && file.endsWith('.json')
               );
               
               if (jsonLogFile) {
                 jsonLogPath = `/app/${jsonLogFile}`;
-                console.log('Found JSON log file:', jsonLogPath);
-              } else {
-                console.log('No JSON log file found with contentful-import-error-log pattern');
               }
-            } catch (dirError) {
-              console.error('Error reading /app directory:', dirError);
+            } catch {
             }
             
             if (jsonLogPath) {
               try {
-                // Читаем JSON файл
                 const jsonLogContent = fs.readFileSync(jsonLogPath, 'utf8');
                 const jsonLog = JSON.parse(jsonLogContent);
-                console.log('Successfully read JSON log file');
-                
-                // Передаем JSON лог в ошибке
                 reject(new Error(`JSON_LOG_CONTENT:${JSON.stringify(jsonLog, null, 2)}`));
               } catch (jsonError) {
-                console.error('Error reading JSON log:', jsonError);
                 reject(new Error(`Failed to restore backup: ${fullOutput}`));
               }
             } else {
-              console.log('No JSON log file found, showing console output');
               reject(new Error(`Failed to restore backup: ${fullOutput}`));
             }
           }
         });
       });
     } catch (error) {
-      console.log('🔍 DEBUG: restoreBackup function ERROR caught');
-      console.error('Error restoring backup:', error);
       throw error;
     }
   }

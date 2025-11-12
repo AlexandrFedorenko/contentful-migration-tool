@@ -2,7 +2,8 @@ import { ApiError } from './api';
 
 export function handleError(error: unknown): string {
   if (error instanceof ApiError) {
-    return `API Error (${error.status}): ${error.message}`;
+    const statusText = error.status ? ` (${error.status})` : '';
+    return `API Error${statusText}: ${error.message}`;
   }
   
   if (error instanceof Error) {

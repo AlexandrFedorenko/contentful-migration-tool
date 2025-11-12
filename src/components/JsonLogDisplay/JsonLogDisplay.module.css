@@ -1,0 +1,91 @@
+.dialogTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.errorChip {
+  margin-left: auto;
+}
+
+.dialogContent {
+  padding-top: 0;
+}
+
+.loadingBox {
+  text-align: center;
+  padding: 32px 0;
+}
+
+.emptyState {
+  margin-bottom: 16px;
+}
+
+.introText {
+  margin-bottom: 24px;
+}
+
+.errorSection {
+  margin-bottom: 24px;
+}
+
+.sectionTitle {
+  margin-bottom: 16px;
+}
+
+.errorItem {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.errorHeader {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.errorTitle {
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.typeChip {
+  margin-left: auto;
+}
+
+.errorDescription {
+  margin-bottom: 16px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.stepsList {
+  padding-left: 16px;
+  margin: 0;
+}
+
+.stepItem {
+  margin-bottom: 8px;
+}
+
+.successBox {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: rgba(76, 175, 80, 0.1);
+  border-radius: 4px;
+}
+
+.successTitle {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.dialogActions {
+  padding: 0 24px 16px;
+}
+
+.openLogButton {
+  margin-right: auto;
+}
+

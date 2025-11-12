@@ -1,18 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from 'contentful-management';
-
-type ResponseData = {
-  success: boolean;
-  message?: string;
-  spaces?: any[];
-};
+import { SpacesResponse } from '@/types/api';
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ResponseData>
+  res: NextApiResponse<SpacesResponse>
 ) {
   try {
-    // Проверяем наличие токена
     const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
     
     if (!token) {
@@ -22,17 +16,13 @@ export default async function handler(
       });
     }
     
-    // Создаем клиент Contentful
     const client = createClient({
       accessToken: token
     });
     
-    // Получаем список пространств
     const spacesCollection = await client.getSpaces();
     const spaces = spacesCollection.items.map(space => ({
-      sys: {
-        id: space.sys.id
-      },
+      id: space.sys.id,
       name: space.name
     }));
     
@@ -41,9 +31,6 @@ export default async function handler(
       spaces
     });
   } catch (error) {
-    console.error('Error loading spaces:', error);
-    
-    // Проверяем, связана ли ошибка с авторизацией
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const statusCode = errorMessage.includes('401') || errorMessage.includes('unauthorized') 
       ? 401 

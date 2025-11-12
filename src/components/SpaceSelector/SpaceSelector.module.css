@@ -1,0 +1,22 @@
+.container {
+  margin-bottom: 24px;
+}
+
+.loadingContainer {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.loadingSpinner {
+  margin-right: 16px;
+}
+
+.errorContainer {
+  margin-bottom: 24px;
+}
+
+.emptyContainer {
+  margin-bottom: 24px;
+}
+

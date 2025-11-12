@@ -7,53 +7,43 @@ interface CheckAuthResponse {
   error?: string;
 }
 
-// Вместо прямого экспорта переменной
-let _authCache: {
+interface AuthCache {
   status: CheckAuthResponse | null;
   timestamp: number;
-} = {
+}
+
+const CACHE_TTL = 30000;
+
+let authCache: AuthCache = {
   status: null,
   timestamp: 0
 };
 
-// Экспортируем объект с геттерами и сеттерами
-export const authCache = {
-  get status() { 
-    return _authCache.status; 
-  },
-  set status(value) { 
-    _authCache.status = value; 
-  },
-  get timestamp() { 
-    return _authCache.timestamp; 
-  },
-  set timestamp(value) { 
-    _authCache.timestamp = value; 
-  },
-  // Метод для сброса кэша
-  reset() {
-    _authCache.status = null;
-    _authCache.timestamp = 0;
-  }
+export const resetAuthCache = (): void => {
+  authCache.status = null;
+  authCache.timestamp = 0;
 };
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<CheckAuthResponse>
 ) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ 
+      logged_in: false, 
+      error: 'Method not allowed' 
+    });
+  }
+
   try {
-    // Используем кэш, если он не старше 30 секунд
     const now = Date.now();
-    if (authCache.status && now - authCache.timestamp < 30000) {
-      console.log('Using cached auth status');
+    if (authCache.status && now - authCache.timestamp < CACHE_TTL) {
       return res.status(200).json(authCache.status);
     }
 
-    // Проверяем статус авторизации
     const status = await ContentfulCLI.checkAuthStatus();
     
-    // Обновляем кэш
-    const result = {
+    const result: CheckAuthResponse = {
       logged_in: status.loggedIn,
       config: status.config
     };
@@ -63,8 +53,6 @@ export default async function handler(
     
     return res.status(200).json(result);
   } catch (error) {
-    console.error('Auth check error:', error);
-    
     return res.status(500).json({ 
       logged_in: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 

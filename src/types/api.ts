@@ -1,4 +1,4 @@
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -20,7 +20,7 @@ export interface EnvironmentsResponse extends ApiResponse {
   environments?: Array<{
     id: string;
     name: string;
-    createdAt: string;
+    createdAt?: string;
   }>;
 }
 
@@ -50,6 +50,17 @@ export interface AnalyzeContentTypesResponse {
     name: string;
     isNew: boolean;
     isModified: boolean;
+    hasNewContent?: boolean;
+    newContentCount?: number;
+    modifiedContentCount?: number;
+    newEntries?: Array<{
+      id: string;
+      title?: string;
+    }>;
+    modifiedEntries?: Array<{
+      id: string;
+      title?: string;
+    }>;
   }>;
   sourceBackupFile?: string;
   targetBackupFile?: string;

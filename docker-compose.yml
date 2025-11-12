@@ -7,7 +7,7 @@ services:
       - "3000:3000"
     volumes:
       - ./backups:/app/backups
-      # Опционально: монтирование .env файла
+      # Optional: mount .env file
       - ./.env:/app/.env
     environment:
       - NODE_ENV=production

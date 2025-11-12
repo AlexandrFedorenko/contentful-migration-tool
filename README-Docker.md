@@ -1,13 +1,13 @@
-# Contentful Migration Tool - Docker инструкции
+# Contentful Migration Tool - Docker Guide
 
-## Быстрый запуск
+## Quick Start
 
-### Режим разработки с watch:
+### Development Mode with Watch:
 ```bash
 npm run docker:dev:watch
 ```
 
-### Обычная разработка:
+### Standard Development:
 ```bash
 npm run docker:dev
 ```
@@ -17,73 +17,75 @@ npm run docker:dev
 npm run docker:start
 ```
 
-### Остановка:
+### Stop:
 ```bash
 npm run docker:stop
 ```
 
-## Все доступные команды:
+## Available Commands
 
 ```bash
-# Разработка с watch режимом (рекомендуется)
+# Development with watch mode (recommended)
 npm run docker:dev:watch
 
-# Обычная разработка
+# Standard development
 npm run docker:dev
 
-# Сборка и запуск в режиме разработки
+# Build and start in development mode
 npm run docker:dev:build
 
-# Production запуск
+# Production start
 npm run docker:start
 
-# Остановка контейнеров
+# Stop containers
 npm run docker:stop
 
-# Просмотр логов
+# View logs
 npm run docker:logs
 
-# Очистка контейнеров и volumes
+# Clean containers and volumes
 npm run docker:clean
 
-# Перезапуск контейнеров
+# Restart containers
 npm run docker:restart
 
-# Сборка production образа
+# Build production image
 npm run docker:build
 ```
 
-## Что было исправлено:
+## What Was Fixed
 
-1. **Удалена ссылка на несуществующий pythonserver** в `next.config.mjs`
-2. **Создан отдельный Dockerfile.dev** для режима разработки
-3. **Настроен watch режим** с поддержкой `WATCHPACK_POLLING` и `CHOKIDAR_USEPOLLING`
-4. **Добавлены volume монтирования** для hot reload
-5. **Убраны все shell скрипты** - теперь используются только npm команды
-6. **Добавлены дополнительные команды** для управления Docker
+1. **Removed reference to non-existent pythonserver** in `next.config.mjs`
+2. **Created separate Dockerfile.dev** for development mode
+3. **Configured watch mode** with support for `WATCHPACK_POLLING` and `CHOKIDAR_USEPOLLING`
+4. **Added volume mounts** for hot reload
+5. **Removed all shell scripts** - now using only npm commands
+6. **Added additional commands** for Docker management
 
-## Структура файлов:
+## File Structure
 
-- `Dockerfile` - для production сборки
-- `Dockerfile.dev` - для разработки с watch режимом
-- `docker-compose.yml` - production конфигурация
-- `docker-compose.dev.yml` - development конфигурация с watch
-- `package.json` - все команды для управления Docker
+- `Dockerfile` - for production build
+- `Dockerfile.dev` - for development with watch mode
+- `docker-compose.yml` - production configuration
+- `docker-compose.dev.yml` - development configuration with watch
+- `package.json` - all commands for Docker management
 
-## Приложение будет доступно по адресу:
+## Application Access
+
+The application will be available at:
 http://localhost:3000
 
-## Особенности watch режима:
+## Watch Mode Features
 
-- Автоматическая перезагрузка при изменении файлов
-- Поддержка TypeScript
-- Hot reload для React компонентов
-- Монтирование всех необходимых директорий
-- Оптимизированная сборка для разработки
+- Automatic reload on file changes
+- TypeScript support
+- Hot reload for React components
+- Mounting of all necessary directories
+- Optimized build for development
 
-## Рекомендуемый рабочий процесс:
+## Recommended Workflow
 
-1. Запустите: `npm run docker:dev:watch`
-2. Откройте http://localhost:3000
-3. Редактируйте файлы в `src/` - изменения будут автоматически отображаться
-4. Для остановки нажмите `Ctrl+C` в терминале 
+1. Run: `npm run docker:dev:watch`
+2. Open http://localhost:3000
+3. Edit files in `src/` - changes will be automatically reflected
+4. To stop, press `Ctrl+C` in the terminal

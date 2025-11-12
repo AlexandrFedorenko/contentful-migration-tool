@@ -1,15 +1,14 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useMemo } from 'react';
 import { Environment, LoadingState } from '@/types/common';
 import { Backup } from '@/types/backup';
-import { RestoreStep } from '@/components/RestoreProgressModal';
+import { RestoreStep } from '@/components/RestoreProgressModal/types';
+import { ErrorInstruction } from '@/utils/errorParser';
 
-// 1) Определяем интерфейсы
 export interface Space {
     id: string;
     name: string;
 }
 
-// 2) Список полей в глобальном стейте
 export interface GlobalState {
     spaceId: string;
     spaces: Space[];
@@ -24,44 +23,26 @@ export interface GlobalState {
     useAdvanced: boolean;
     statusMessage: string | null;
     alertOpen: boolean;
-    loadingBackup: boolean;
-    loadingRestore: boolean;
-    loadingMigration: boolean;
-    loadingSpaces: boolean;
     errorSpaces: string | null;
-    loading: {
-        loadingSpaces: boolean;
-        loadingBackups: boolean;
-        loadingBackup: boolean;
-        loadingRestore: boolean;
-        loadingDelete: boolean;
-        loadingMigrate: boolean;
-        loadingAuth: boolean;
-        loadingAnalyze: boolean;
-        loadingCustomMigrate: boolean;
-        loadingCustomRestore: boolean;
-    };
+    loading: LoadingState;
     errors: {
         [key: string]: string | null;
     };
     restoreMode: boolean;
-    // Новые поля для управления ошибками
-    errorInstruction: any | null;
+    errorInstruction: ErrorInstruction | null;
     errorModalOpen: boolean;
     lastErrorMessage: string | null;
-    errorBackupFile: string | null; // Файл бэкапа, который вызвал ошибку
-    errorInstructions: any[]; // Массив всех ошибок для детального отображения
-    // Поля для прогресса восстановления
+    errorBackupFile: string | null;
+    errorInstructions: ErrorInstruction[];
     restoreProgress: {
       isActive: boolean;
       steps: RestoreStep[];
       currentStep: number;
       overallProgress: number;
-      restoringBackupName?: string; // Имя бэкапа, который сейчас восстанавливается
+      restoringBackupName?: string;
     };
 }
 
-// 3) Начальное значение
 const initialState: GlobalState = {
     spaceId: '',
     spaces: [],
@@ -76,18 +57,15 @@ const initialState: GlobalState = {
     useAdvanced: false,
     statusMessage: null,
     alertOpen: false,
-    loadingBackup: false,
-    loadingRestore: false,
-    loadingMigration: false,
-    loadingSpaces: false,
     errorSpaces: null,
     loading: {
         loadingSpaces: false,
+        loadingEnvironments: false,
         loadingBackups: false,
         loadingBackup: false,
         loadingRestore: false,
+        loadingMigration: false,
         loadingDelete: false,
-        loadingMigrate: false,
         loadingAuth: false,
         loadingAnalyze: false,
         loadingCustomMigrate: false,
@@ -95,13 +73,11 @@ const initialState: GlobalState = {
     },
     errors: {},
     restoreMode: false,
-    // Новые поля для управления ошибками
     errorInstruction: null,
     errorModalOpen: false,
     lastErrorMessage: null,
     errorBackupFile: null,
     errorInstructions: [],
-    // Поля для прогресса восстановления
     restoreProgress: {
       isActive: false,
       steps: [],
@@ -110,7 +86,6 @@ const initialState: GlobalState = {
     }
 };
 
-// 4) Описание Action
 type Action = 
     | { type: "SET_SPACE_ID"; payload: string }
     | { type: "SET_SOURCE_ENV"; payload: string }
@@ -126,18 +101,16 @@ type Action =
     | { type: "SET_BACKUPS"; payload: Backup[] }
     | { type: "SET_ERROR"; payload: { key: string; value: string | null } }
     | { type: "SET_RESTORE_MODE"; payload: boolean }
-    | { type: "SET_ERROR_INSTRUCTION"; payload: { instruction: any; errorMessage: string; backupFile?: string } }
-    | { type: "SET_ERROR_INSTRUCTIONS"; payload: { instructions: any[]; errorMessage: string; backupFile?: string } }
+    | { type: "SET_ERROR_INSTRUCTION"; payload: { instruction: ErrorInstruction; errorMessage: string; backupFile?: string } }
+    | { type: "SET_ERROR_INSTRUCTIONS"; payload: { instructions: ErrorInstruction[]; errorMessage: string; backupFile?: string } }
     | { type: "CLEAR_ERROR_INSTRUCTION" }
     | { type: "TOGGLE_ERROR_MODAL"; payload: boolean }
     | { type: "SET_RESTORE_PROGRESS"; payload: { isActive: boolean; steps?: RestoreStep[]; currentStep?: number; overallProgress?: number; restoringBackupName?: string } }
     | { type: "UPDATE_RESTORE_STEP"; payload: { stepIndex: number; status: RestoreStep['status']; message?: string; duration?: string } };
 
-// 5) Сам reducer
 function reducer(state: GlobalState, action: Action): GlobalState {
     switch (action.type) {
         case "SET_SPACE_ID":
-            console.log('Setting spaceId:', action.payload);
             return {
                 ...state,
                 spaceId: action.payload
@@ -179,7 +152,10 @@ function reducer(state: GlobalState, action: Action): GlobalState {
         case "SET_SPACES_LOADING":
             return {
                 ...state,
-                loadingSpaces: action.payload
+                loading: {
+                    ...state.loading,
+                    loadingSpaces: action.payload
+                }
             };
         case "SET_SPACES_ERROR":
             return {
@@ -276,25 +252,35 @@ function reducer(state: GlobalState, action: Action): GlobalState {
     }
 }
 
-// 6) Создаём контекст
-const GlobalContext = createContext<{
+interface GlobalContextType {
     state: GlobalState;
     dispatch: React.Dispatch<Action>;
-}>({ state: initialState, dispatch: () => null });
+}
 
-// 7) Провайдер, обёртывающий всё приложение
-export function GlobalProvider({ children }: { children: ReactNode }) {
+const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
+
+interface GlobalProviderProps {
+    children: ReactNode;
+}
+
+export const GlobalProvider = React.memo<GlobalProviderProps>(({ children }) => {
     const [state, dispatch] = useReducer(reducer, initialState);
+    
+    const contextValue = useMemo(
+        () => ({ state, dispatch }),
+        [state, dispatch]
+    );
 
     return (
-        <GlobalContext.Provider value={{ state, dispatch }}>
+        <GlobalContext.Provider value={contextValue}>
             {children}
         </GlobalContext.Provider>
     );
-}
+});
 
-// 8) Хук для доступа к контексту
-export function useGlobalContext() {
+GlobalProvider.displayName = 'GlobalProvider';
+
+export function useGlobalContext(): GlobalContextType {
     const context = useContext(GlobalContext);
     if (!context) {
         throw new Error('useGlobalContext must be used within a GlobalProvider');

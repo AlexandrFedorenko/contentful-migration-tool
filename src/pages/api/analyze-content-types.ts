@@ -1,26 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ContentfulManagement } from "@/utils/contentful-management";
-import * as fs from 'fs';
-import * as path from 'path';
-
-interface AnalyzeRequest {
-  spaceId: string;
-  sourceEnvironment: string;
-  targetEnvironment: string;
-}
-
-interface AnalyzeResponse {
-  success: boolean;
-  error?: string;
-  contentTypes?: Array<{
-    id: string;
-    name: string;
-    isNew: boolean;
-    isModified: boolean;
-    hasNewContent?: boolean;
-    newContentCount?: number;
-  }>;
-}
+import { AnalyzeContentTypesResponse } from "@/types/api";
 
 interface ContentType {
   sys: {
@@ -31,15 +11,58 @@ interface ContentType {
   name: string;
   description?: string;
   displayField?: string;
-  fields: any[];
+  fields: ContentTypeField[];
+}
+
+interface ContentTypeField {
+  id: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  localized?: boolean;
+}
+
+interface Entry {
+  sys: {
+    id: string;
+    contentType: {
+      sys: {
+        id: string;
+      };
+    };
+    updatedAt?: string;
+    version?: number;
+  };
+  fields?: {
+    title?: Record<string, string>;
+    name?: Record<string, string>;
+    [key: string]: any;
+  };
+}
+
+interface ContentTypeAnalysis {
+  id: string;
+  name: string;
+  isNew: boolean;
+  isModified: boolean;
+  hasNewContent?: boolean;
+  newContentCount?: number;
+  modifiedContentCount?: number;
+  newEntries?: Array<{
+    id: string;
+    title?: string;
+  }>;
+  modifiedEntries?: Array<{
+    id: string;
+    title?: string;
+  }>;
 }
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<AnalyzeResponse>
+  res: NextApiResponse<AnalyzeContentTypesResponse>
 ) {
-  // Увеличиваем таймаут для больших файлов
-  res.setTimeout(300000); // 5 минут
+  res.setTimeout(300000);
   
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -62,45 +85,19 @@ export default async function handler(
       });
     }
 
-    try {
-      console.log('Starting content type analysis using Management API...');
-      
-      // 1. Get content types from source environment
-      console.log(`Fetching content types from source environment: ${sourceEnvironment}`);
-      const sourceContentTypes = await ContentfulManagement.getContentTypes(spaceId, sourceEnvironment);
-      console.log(`Found ${sourceContentTypes.length} content types in source environment`);
+    const sourceContentTypes = await ContentfulManagement.getContentTypes(spaceId, sourceEnvironment);
+    const targetContentTypes = await ContentfulManagement.getContentTypes(spaceId, targetEnvironment);
+    const sourceEntries = await ContentfulManagement.getEntries(spaceId, sourceEnvironment);
+    const targetEntries = await ContentfulManagement.getEntries(spaceId, targetEnvironment);
+    
+    const analysis = analyzeContentTypesAndContent(sourceContentTypes, targetContentTypes, sourceEntries, targetEntries);
 
-      // 2. Get content types from target environment
-      console.log(`Fetching content types from target environment: ${targetEnvironment}`);
-      const targetContentTypes = await ContentfulManagement.getContentTypes(spaceId, targetEnvironment);
-      console.log(`Found ${targetContentTypes.length} content types in target environment`);
-
-      // 3. Get entries from both environments for content analysis
-      console.log('Fetching entries for content analysis...');
-      const sourceEntries = await ContentfulManagement.getEntries(spaceId, sourceEnvironment);
-      const targetEntries = await ContentfulManagement.getEntries(spaceId, targetEnvironment);
-      console.log(`Found ${sourceEntries.length} entries in source, ${targetEntries.length} in target`);
-
-      // 4. Analyze content types and content
-      console.log('Analyzing content types and content...');
-      const analysis = analyzeContentTypesAndContent(sourceContentTypes, targetContentTypes, sourceEntries, targetEntries);
-      console.log(`Analysis completed. Found ${analysis.length} content types with changes`);
-
-      return res.status(200).json({ 
-        success: true,
-        contentTypes: analysis
-      });
-
-    } catch (error) {
-      console.error('Analyze content types error:', error);
-      return res.status(500).json({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error occurred' 
-      });
-    }
+    return res.status(200).json({ 
+      success: true,
+      contentTypes: analysis
+    });
 
   } catch (error) {
-    console.error('Analyze content types error:', error);
     return res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error occurred' 
@@ -108,76 +105,108 @@ export default async function handler(
   }
 }
 
-// Analyze content types and content to find new/modified types and new content
+function getEntryTitle(entry: Entry): string {
+  if (entry.fields?.title) {
+    const titleKeys = Object.keys(entry.fields.title);
+    if (titleKeys.length > 0) {
+      return entry.fields.title[titleKeys[0]];
+    }
+  }
+  if (entry.fields?.name) {
+    const nameKeys = Object.keys(entry.fields.name);
+    if (nameKeys.length > 0) {
+      return entry.fields.name[nameKeys[0]];
+    }
+  }
+  return entry.sys.id;
+}
+
 function analyzeContentTypesAndContent(
   sourceContentTypes: ContentType[], 
   targetContentTypes: ContentType[],
-  sourceEntries: any[],
-  targetEntries: any[]
-) {
+  sourceEntries: Entry[],
+  targetEntries: Entry[]
+): ContentTypeAnalysis[] {
   const targetContentTypesMap = new Map(targetContentTypes.map(ct => [ct.sys.id, ct]));
   const targetEntriesMap = new Map(targetEntries.map(entry => [entry.sys.id, entry]));
 
-  const analysis: Array<{
-    id: string;
-    name: string;
-    isNew: boolean;
-    isModified: boolean;
-    hasNewContent?: boolean;
-    newContentCount?: number;
-  }> = [];
+  const analysis: ContentTypeAnalysis[] = [];
 
-  console.log('Comparing content types and content...');
-  
-  // Check for new and modified content types
-  sourceContentTypes.forEach((sourceCT, index) => {
-    console.log(`Processing content type ${index + 1}/${sourceContentTypes.length}: ${sourceCT.name} (${sourceCT.sys.id})`);
-    
+  sourceContentTypes.forEach((sourceCT) => {
     const targetCT = targetContentTypesMap.get(sourceCT.sys.id);
+    const sourceEntriesForType = sourceEntries.filter(entry => entry.sys.contentType.sys.id === sourceCT.sys.id);
     
     if (!targetCT) {
-      // New content type
-      console.log(`Found NEW content type: ${sourceCT.name}`);
+      const newEntries = sourceEntriesForType.map(entry => ({
+        id: entry.sys.id,
+        title: getEntryTitle(entry)
+      }));
+      
       analysis.push({
         id: sourceCT.sys.id,
         name: sourceCT.name,
         isNew: true,
-        isModified: false
+        isModified: false,
+        hasNewContent: newEntries.length > 0,
+        newContentCount: newEntries.length,
+        modifiedContentCount: 0,
+        newEntries: newEntries,
+        modifiedEntries: []
       });
     } else {
-      // Check if modified by comparing fields
-      console.log(`Comparing content type: ${sourceCT.name}`);
       const isModified = !isContentTypeEqual(sourceCT, targetCT);
       
-      // Check for new content in this content type
-      const sourceEntriesForType = sourceEntries.filter(entry => entry.sys.contentType.sys.id === sourceCT.sys.id);
-      const targetEntriesForType = targetEntries.filter(entry => entry.sys.contentType.sys.id === sourceCT.sys.id);
+      const newEntries = sourceEntriesForType
+        .filter(sourceEntry => !targetEntriesMap.has(sourceEntry.sys.id))
+        .map(entry => ({
+          id: entry.sys.id,
+          title: getEntryTitle(entry)
+        }));
       
-      const newEntries = sourceEntriesForType.filter(sourceEntry => 
-        !targetEntriesMap.has(sourceEntry.sys.id)
-      );
+      const modifiedEntries = sourceEntriesForType
+        .filter(sourceEntry => {
+          const targetEntry = targetEntriesMap.get(sourceEntry.sys.id);
+          if (!targetEntry) return false;
+          
+          const sourceVersion = sourceEntry.sys.updatedAt || sourceEntry.sys.version;
+          const targetVersion = targetEntry.sys.updatedAt || targetEntry.sys.version;
+          
+          if (sourceVersion !== targetVersion) {
+            return true;
+          }
+          
+          const sourceContentHash = JSON.stringify(sourceEntry.fields);
+          const targetContentHash = JSON.stringify(targetEntry.fields);
+          return sourceContentHash !== targetContentHash;
+        })
+        .map(entry => ({
+          id: entry.sys.id,
+          title: getEntryTitle(entry)
+        }));
       
       const hasNewContent = newEntries.length > 0;
+      const hasModifiedContent = modifiedEntries.length > 0;
+      const totalContentChanges = newEntries.length + modifiedEntries.length;
       
-      if (isModified || hasNewContent) {
-        console.log(`Found ${isModified ? 'MODIFIED' : ''} ${hasNewContent ? 'WITH NEW CONTENT' : ''} content type: ${sourceCT.name} (${newEntries.length} new entries)`);
+      if (isModified || hasNewContent || hasModifiedContent) {
         analysis.push({
           id: sourceCT.sys.id,
           name: sourceCT.name,
           isNew: false,
           isModified: isModified,
-          hasNewContent: hasNewContent,
-          newContentCount: newEntries.length
+          hasNewContent: totalContentChanges > 0,
+          newContentCount: newEntries.length,
+          modifiedContentCount: modifiedEntries.length,
+          newEntries: newEntries,
+          modifiedEntries: modifiedEntries
         });
       }
     }
   });
 
-  console.log('Content type and content analysis completed');
   return analysis;
 }
 
-// Compare two content types for equality
 function isContentTypeEqual(ct1: ContentType, ct2: ContentType): boolean {
   if (ct1.name !== ct2.name || 
       ct1.description !== ct2.description || 
@@ -189,9 +218,8 @@ function isContentTypeEqual(ct1: ContentType, ct2: ContentType): boolean {
     return false;
   }
 
-  // Compare fields (optimized comparison)
-  const sortedFields1 = ct1.fields.sort((a, b) => a.id.localeCompare(b.id));
-  const sortedFields2 = ct2.fields.sort((a, b) => a.id.localeCompare(b.id));
+  const sortedFields1 = [...ct1.fields].sort((a, b) => a.id.localeCompare(b.id));
+  const sortedFields2 = [...ct2.fields].sort((a, b) => a.id.localeCompare(b.id));
 
   for (let i = 0; i < sortedFields1.length; i++) {
     const field1 = sortedFields1[i];

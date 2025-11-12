@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Grid, Button, Dialog, DialogTitle, DialogContent, TextField, CircularProgress, Checkbox, FormControlLabel, Input, InputLabel, FormControl } from '@mui/material';
-import SpaceSelector from '@/components/SpaceSelector';
-import EnvironmentSelector from '@/components/EnvironmentSelector';
-import BackupList from '@/components/BackupList';
+import { Container, Typography, Box, Paper, Grid, Button, CircularProgress, Accordion, AccordionSummary, AccordionDetails, FormControlLabel, Checkbox } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import EnvironmentSelector from '@/components/EnvironmentSelector/EnvironmentSelector';
+import BackupList from '@/components/BackupList/BackupList';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useEnvironments } from '@/hooks/useEnvironments';
 import { useBackups } from '@/hooks/useBackups';
 import { useBackup } from '@/hooks/useBackup';
 import { useMigration } from '@/hooks/useMigration';
 import { useCustomMigrate } from '@/hooks/useCustomMigrate';
-import ContentfulBrowserAuth from '@/components/ContentfulBrowserAuth';
+import ContentfulBrowserAuth from '@/components/ContentfulBrowserAuth/ContentfulBrowserAuth';
 import { useAuth } from '@/context/AuthContext';
-import BlurredModal from '@/components/BlurredModal';
-import JsonLogDisplay from '@/components/JsonLogDisplay';
+import JsonLogDisplay from '@/components/JsonLogDisplay/JsonLogDisplay';
+import AuthDialog from '@/components/AuthDialog/AuthDialog';
+import SpaceSelectorSection from '@/components/SpaceSelectorSection/SpaceSelectorSection';
+import CustomRestoreSection from '@/components/CustomRestoreSection/CustomRestoreSection';
+import { ContentType } from '@/components/CustomMigrateSection/types';
 
 
 export default function Home() {
@@ -25,21 +28,13 @@ export default function Home() {
   const { isLoggedIn, isLoading } = useAuth();
 
   const [showAuthDialog, setShowAuthDialog] = useState<boolean>(false);
-  const [showTokenInput, setShowTokenInput] = useState(false);
-  const [token, setToken] = useState('');
   const [customRestoreMode, setCustomRestoreMode] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loadingCustomRestore, setLoadingCustomRestore] = useState(false);
   const [customMigrateMode, setCustomMigrateMode] = useState(false);
-  const [contentTypes, setContentTypes] = useState<Array<{
-    id: string;
-    name: string;
-    isNew: boolean;
-    isModified: boolean;
-    hasNewContent?: boolean;
-    newContentCount?: number;
-  }>>([]);
+  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
+  const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (state.spaceId) {
@@ -49,17 +44,10 @@ export default function Home() {
   }, [state.spaceId, loadEnvironments, loadBackups]);
 
   useEffect(() => {
-    // Показывать алерт только если есть текст
-    // setShowAlert(!!state.statusMessage); // This line is removed
-  }, [state.statusMessage]);
-
-  useEffect(() => {
-    // Проверяем, есть ли токен в URL
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     
     if (token) {
-      // Если есть токен, сохраняем его
       const saveTokenFromUrl = async () => {
         try {
           const response = await fetch('/api/contentful-auth-browser', {
@@ -76,30 +64,16 @@ export default function Home() {
           const data = await response.json();
           
           if (data.success) {
-            // Очищаем URL от токена
             window.history.replaceState({}, document.title, '/');
-            // Обновляем статус авторизации
-            const authResponse = await fetch('/api/check-auth');
-            const authData = await authResponse.json();
-            // dispatch({ type: "SET_DATA", payload: { authStatus: authData } });
+            await fetch('/api/check-auth');
           }
-        } catch (error) {
-          console.error('Error saving token from URL:', error);
+        } catch {
         }
       };
       
       saveTokenFromUrl();
     }
   }, []);
-
-  // const handleCloseAlert = () => { // This function is removed
-  //   setShowAlert(false);
-  //   dispatch({ type: "SET_STATUS", payload: null });
-  // };
-
-  const handleAuthClick = () => {
-    setShowAuthDialog(true);
-  };
 
   const handleCloseAuthDialog = () => {
     setShowAuthDialog(false);
@@ -108,7 +82,6 @@ export default function Home() {
   const handleCustomRestoreModeChange = (checked: boolean) => {
     setCustomRestoreMode(checked);
     if (checked) {
-      // Отключаем обычный restore mode
       dispatch({ type: "SET_RESTORE_MODE", payload: false });
     }
   };
@@ -171,7 +144,6 @@ export default function Home() {
         throw new Error(data.error || 'Custom restore failed');
       }
     } catch (error) {
-      console.error('Custom restore error:', error);
       dispatch({ type: "SET_STATUS", payload: `Custom restore failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
     } finally {
       setLoadingCustomRestore(false);
@@ -181,11 +153,9 @@ export default function Home() {
   const handleCustomMigrateModeChange = (checked: boolean) => {
     setCustomMigrateMode(checked);
     if (checked) {
-      // Отключаем другие режимы
       dispatch({ type: "SET_RESTORE_MODE", payload: false });
       setCustomRestoreMode(false);
     }
-    // Сброс состояния при отключении
     if (!checked) {
       setContentTypes([]);
       setSelectedContentTypes([]);
@@ -196,10 +166,8 @@ export default function Home() {
     try {
       const result = await analyzeContentTypes();
       setContentTypes(result);
-      // По умолчанию выбираем все content types
       setSelectedContentTypes(result.map(ct => ct.id));
-    } catch (error) {
-      console.error('Failed to analyze content types:', error);
+    } catch {
     }
   };
 
@@ -211,15 +179,39 @@ export default function Home() {
     );
   };
 
+  const handleEntryToggle = (contentTypeId: string, entryId: string) => {
+    setSelectedEntries(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(entryId)) {
+        newSet.delete(entryId);
+      } else {
+        newSet.add(entryId);
+      }
+      
+      const contentType = contentTypes.find(ct => ct.id === contentTypeId);
+      if (contentType) {
+        const allEntries = [
+          ...(contentType.newEntries || []),
+          ...(contentType.modifiedEntries || [])
+        ];
+        const selectedEntriesForType = allEntries.filter(e => newSet.has(e.id));
+        
+        if (selectedEntriesForType.length > 0 && !selectedContentTypes.includes(contentTypeId)) {
+          setSelectedContentTypes(prev => [...prev, contentTypeId]);
+        }
+      }
+      
+      return newSet;
+    });
+  };
+
   const handleCustomMigrate = async () => {
     try {
       await customMigrate(selectedContentTypes);
-      // Сброс состояния после успешной миграции
       setCustomMigrateMode(false);
       setContentTypes([]);
       setSelectedContentTypes([]);
-    } catch (error) {
-      console.error('Failed to perform custom migration:', error);
+    } catch {
     }
   };
 
@@ -233,61 +225,35 @@ export default function Home() {
         transition: 'filter 0.3s ease',
       }}
     >
-      <Box sx={{ mb: 4 }}>
+      {!isLoggedIn ? (
         <ContentfulBrowserAuth />
-        <Typography variant="body2" color="text.secondary">
-          Auth Status: {isLoading ? 'Loading...' : (isLoggedIn ? 'Logged In' : 'Logged Out')}
-        </Typography>
-      </Box>
-
-      <Typography variant="h4" component="h1" gutterBottom>
-        Contentful Migration Tool
-      </Typography>
+      ) : (
+        <>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            gutterBottom
+            sx={{ textAlign: 'center' }}
+          >
+            Contentful Migration Tool
+          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <ContentfulBrowserAuth />
+          </Box>
+        </>
+      )}
 
       {isLoggedIn && (
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Select Space
-              </Typography>
-              <SpaceSelector />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={!!state.restoreMode}
-                    onChange={e => handleRestoreModeChange(e.target.checked)}
-                    color="primary"
-                    disabled={customRestoreMode || customMigrateMode}
-                  />
-                }
-                label="Restore"
-                sx={{ mt: 2 }}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={customRestoreMode}
-                    onChange={e => handleCustomRestoreModeChange(e.target.checked)}
-                    color="secondary"
-                    disabled={customMigrateMode}
-                  />
-                }
-                label="Custom Restore"
-                sx={{ mt: 1 }}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={customMigrateMode}
-                    onChange={e => handleCustomMigrateModeChange(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="Custom Migrate"
-                sx={{ mt: 1 }}
-              />
-            </Paper>
+            <SpaceSelectorSection
+              state={state}
+              onRestoreModeChange={handleRestoreModeChange}
+              onCustomRestoreModeChange={handleCustomRestoreModeChange}
+              onCustomMigrateModeChange={handleCustomMigrateModeChange}
+              customRestoreMode={customRestoreMode}
+              customMigrateMode={customMigrateMode}
+            />
           </Grid>
 
           {state.spaceId && (
@@ -315,18 +281,37 @@ export default function Home() {
                   <Button 
                     variant="contained" 
                     color="primary"
-                    disabled={!state.selectedDonor || state.loading.loadingBackup || state.loading.loadingMigrate || state.restoreMode || customRestoreMode || loadingCustomRestore}
+                    disabled={
+                      !state.selectedDonor ||
+                      state.loading.loadingBackup ||
+                      state.loading.loadingMigration ||
+                      state.restoreMode ||
+                      customRestoreMode ||
+                      loadingCustomRestore
+                    }
                     onClick={handleBackup}
                   >
-                    {state.loading.loadingBackup ? <CircularProgress size={20} color="inherit" /> : 'Backup Source'}
+                    {state.loading.loadingBackup ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      'Backup Source'
+                    )}
                   </Button>
                   <Button 
                     variant="contained" 
                     color="secondary"
-                    disabled={!state.selectedDonor || !state.selectedTarget || state.selectedDonor === state.selectedTarget || state.loading.loadingMigrate || state.restoreMode || customRestoreMode || loadingCustomRestore}
+                    disabled={
+                      !state.selectedDonor ||
+                      !state.selectedTarget ||
+                      state.selectedDonor === state.selectedTarget ||
+                      state.loading.loadingMigration ||
+                      state.restoreMode ||
+                      customRestoreMode ||
+                      loadingCustomRestore
+                    }
                     onClick={handleMigration}
                   >
-                    {state.loading.loadingMigrate ? (
+                    {state.loading.loadingMigration ? (
                       <CircularProgress size={20} color="inherit" />
                     ) : (
                       'Migrate Content'
@@ -334,47 +319,17 @@ export default function Home() {
                   </Button>
                 </Box>
 
-                {/* Custom Restore Section */}
                 {customRestoreMode && (
-                  <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Custom Restore
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      ⚠️ This will completely replace the target environment with the selected file.
-                    </Typography>
-                    <FormControl fullWidth sx={{ mb: 2 }}>
-                      <InputLabel htmlFor="file-input">Select Backup File</InputLabel>
-                      <Input
-                        id="file-input"
-                        type="file"
-                        inputProps={{ accept: '.json' }}
-                        onChange={handleFileSelect}
-                        disabled={loadingCustomRestore}
-                      />
-                    </FormControl>
-                    {selectedFile && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Selected: {selectedFile.name}
-                      </Typography>
-                    )}
-                    <Button
-                      variant="contained"
-                      color="warning"
-                      fullWidth
-                      disabled={!selectedFile || !state.selectedTarget || loadingCustomRestore || state.selectedTarget === 'master'}
-                      onClick={handleCustomRestore}
-                    >
-                      {loadingCustomRestore ? (
-                        <CircularProgress size={20} color="inherit" />
-                      ) : (
-                        'Replace Environment & Import'
-                      )}
-                    </Button>
-                  </Box>
+                  <CustomRestoreSection
+                    state={state}
+                    selectedFile={selectedFile}
+                    loadingCustomRestore={loadingCustomRestore}
+                    onFileSelect={handleFileSelect}
+                    onCustomRestore={handleCustomRestore}
+                  />
                 )}
 
-                {/* Custom Migrate Section */}
+                
                 {customMigrateMode && (
                   <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
                     <Typography variant="subtitle2" gutterBottom>
@@ -399,76 +354,227 @@ export default function Home() {
                       </Button>
                     ) : (
                       <>
-                        <Box sx={{ maxHeight: 200, overflow: 'auto', mb: 2, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
-                          {contentTypes.map((contentType) => (
-                            <FormControlLabel
-                              key={contentType.id}
-                              control={
-                                <Checkbox
-                                  checked={selectedContentTypes.includes(contentType.id)}
-                                  onChange={() => handleContentTypeToggle(contentType.id)}
-                                  color="primary"
-                                  size="small"
-                                />
-                              }
-                              label={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <span>{contentType.name}</span>
-                                  {contentType.isNew && (
-                                    <Box component="span" sx={{ 
-                                      bgcolor: 'success.main', 
-                                      color: 'white', 
-                                      px: 1, 
-                                      py: 0.5, 
-                                      borderRadius: 1, 
-                                      fontSize: '0.75rem' 
-                                    }}>
-                                      NEW
+                        <Box sx={{ maxHeight: 500, overflow: 'auto', mb: 2 }}>
+                          {contentTypes.map((contentType) => {
+                            const allEntries = [
+                              ...(contentType.newEntries || []),
+                              ...(contentType.modifiedEntries || [])
+                            ];
+                            const selectedEntriesForType = allEntries.filter(e => selectedEntries.has(e.id));
+                            
+                            return (
+                              <Accordion key={contentType.id} sx={{ mb: 1 }}>
+                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                  <FormControlLabel
+                                    onClick={(e) => e.stopPropagation()}
+                                    control={
+                                      <Checkbox
+                                        checked={selectedContentTypes.includes(contentType.id)}
+                                        onChange={() => handleContentTypeToggle(contentType.id)}
+                                        color="primary"
+                                        size="small"
+                                      />
+                                    }
+                                    label={
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: 1, 
+                                        overflowX: 'auto',
+                                        width: '100%',
+                                        '&::-webkit-scrollbar': {
+                                          height: '4px',
+                                        },
+                                        '&::-webkit-scrollbar-thumb': {
+                                          backgroundColor: '#ccc',
+                                          borderRadius: '2px',
+                                        }
+                                      }}>
+                                        <Typography variant="body1" fontWeight="medium" sx={{ whiteSpace: 'nowrap' }}>
+                                          {contentType.name}
+                                        </Typography>
+                                        {contentType.isNew && (
+                                          <Box component="span" sx={{ 
+                                            bgcolor: 'success.main', 
+                                            color: 'white', 
+                                            px: 1, 
+                                            py: 0.5, 
+                                            borderRadius: 1, 
+                                            fontSize: '0.75rem',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            NEW MODEL
+                                          </Box>
+                                        )}
+                                        {contentType.isModified && (
+                                          <Box component="span" sx={{ 
+                                            bgcolor: 'warning.main', 
+                                            color: 'white', 
+                                            px: 1, 
+                                            py: 0.5, 
+                                            borderRadius: 1, 
+                                            fontSize: '0.75rem',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            MODEL MODIFIED
+                                          </Box>
+                                        )}
+                                        {allEntries.length > 0 && (
+                                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                                            ({allEntries.length} entries)
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    }
+                                  />
+                                </AccordionSummary>
+                                <AccordionDetails>
+                                 
+                                  {(contentType.newEntries && contentType.newEntries.length > 0) && (
+                                    <Box sx={{ mb: 2 }}>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 'medium' }}>
+                                        New Content ({contentType.newEntries.length}):
+                                      </Typography>
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: 0.5,
+                                        maxHeight: 200,
+                                        overflowY: 'auto'
+                                      }}>
+                                        {contentType.newEntries.map((entry: { id: string; title?: string }) => (
+                                          <FormControlLabel
+                                            key={entry.id}
+                                            control={
+                                              <Checkbox
+                                                checked={selectedEntries.has(entry.id)}
+                                                onChange={() => handleEntryToggle(contentType.id, entry.id)}
+                                                color="primary"
+                                                size="small"
+                                              />
+                                            }
+                                            label={
+                                              <Box sx={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: 0.5,
+                                                overflowX: 'auto',
+                                                width: '100%',
+                                                '&::-webkit-scrollbar': {
+                                                  height: '4px',
+                                                },
+                                                '&::-webkit-scrollbar-thumb': {
+                                                  backgroundColor: '#ccc',
+                                                  borderRadius: '2px',
+                                                }
+                                              }}>
+                                                <Box component="span" sx={{ fontSize: '0.7rem', color: 'success.dark' }}>•</Box>
+                                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                                  {entry.title || entry.id}
+                                                </Typography>
+                                              </Box>
+                                            }
+                                            sx={{ m: 0 }}
+                                          />
+                                        ))}
+                                      </Box>
                                     </Box>
                                   )}
-                                  {contentType.isModified && (
-                                    <Box component="span" sx={{ 
-                                      bgcolor: 'warning.main', 
-                                      color: 'white', 
-                                      px: 1, 
-                                      py: 0.5, 
-                                      borderRadius: 1, 
-                                      fontSize: '0.75rem' 
-                                    }}>
-                                      MODIFIED
+                                  
+                        
+                                  {(contentType.modifiedEntries && contentType.modifiedEntries.length > 0) && (
+                                    <Box>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 'medium' }}>
+                                        Modified Content ({contentType.modifiedEntries.length}):
+                                      </Typography>
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: 0.5,
+                                        maxHeight: 200,
+                                        overflowY: 'auto'
+                                      }}>
+                                        {contentType.modifiedEntries.map((entry: { id: string; title?: string }) => (
+                                          <FormControlLabel
+                                            key={entry.id}
+                                            control={
+                                              <Checkbox
+                                                checked={selectedEntries.has(entry.id)}
+                                                onChange={() => handleEntryToggle(contentType.id, entry.id)}
+                                                color="primary"
+                                                size="small"
+                                              />
+                                            }
+                                            label={
+                                              <Box sx={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: 0.5,
+                                                overflowX: 'auto',
+                                                width: '100%',
+                                                '&::-webkit-scrollbar': {
+                                                  height: '4px',
+                                                },
+                                                '&::-webkit-scrollbar-thumb': {
+                                                  backgroundColor: '#ccc',
+                                                  borderRadius: '2px',
+                                                }
+                                              }}>
+                                                <Box component="span" sx={{ fontSize: '0.7rem', color: 'warning.dark' }}>•</Box>
+                                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                                  {entry.title || entry.id}
+                                                </Typography>
+                                              </Box>
+                                            }
+                                            sx={{ m: 0 }}
+                                          />
+                                        ))}
+                                      </Box>
                                     </Box>
                                   )}
-                                  {contentType.hasNewContent && (
-                                    <Box component="span" sx={{ 
-                                      bgcolor: 'info.main', 
-                                      color: 'white', 
-                                      px: 1, 
-                                      py: 0.5, 
-                                      borderRadius: 1, 
-                                      fontSize: '0.75rem' 
-                                    }}>
-                                      +{contentType.newContentCount} CONTENT
+                                  
+                                  {(!contentType.newEntries || contentType.newEntries.length === 0) && 
+                                   (!contentType.modifiedEntries || contentType.modifiedEntries.length === 0) && 
+                                   (contentType.isNew || contentType.isModified) && (
+                                    <Box>
+                                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', fontStyle: 'italic' }}>
+                                        No content changes (only model structure)
+                                      </Typography>
                                     </Box>
                                   )}
-                                </Box>
-                              }
-                              sx={{ display: 'block', mb: 1 }}
-                            />
-                          ))}
+                                </AccordionDetails>
+                              </Accordion>
+                            );
+                          })}
                         </Box>
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          fullWidth
-                          onClick={handleCustomMigrate}
-                          disabled={selectedContentTypes.length === 0 || state.loading.loadingCustomMigrate}
-                        >
-                          {state.loading.loadingCustomMigrate ? (
-                            <CircularProgress size={20} color="inherit" />
-                          ) : (
-                            `Migrate Selected (${selectedContentTypes.length})`
-                          )}
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                          <Button
+                            variant="outlined"
+                            color="secondary"
+                            fullWidth
+                            onClick={() => {
+                              setContentTypes([]);
+                              setSelectedContentTypes([]);
+                              setSelectedEntries(new Set());
+                            }}
+                            disabled={state.loading.loadingCustomMigrate || state.loading.loadingAnalyze}
+                          >
+                            Cancel Analysis
+                          </Button>
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            fullWidth
+                            onClick={handleCustomMigrate}
+                            disabled={selectedContentTypes.length === 0 || state.loading.loadingCustomMigrate}
+                          >
+                            {state.loading.loadingCustomMigrate ? (
+                              <CircularProgress size={20} color="inherit" />
+                            ) : (
+                              `Migrate Selected (${selectedContentTypes.length})`
+                            )}
+                          </Button>
+                        </Box>
                       </>
                     )}
                   </Box>
@@ -490,135 +596,11 @@ export default function Home() {
         </Grid>
       )}
 
-      <Dialog 
+      <AuthDialog 
         open={showAuthDialog} 
         onClose={handleCloseAuthDialog}
-        maxWidth="md"
-        fullWidth
-        BackdropProps={{
-          style: {
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-          }
-        }}
-        PaperProps={{
-          style: {
-            boxShadow: '0 16px 70px rgba(0, 0, 0, 0.5)',
-            borderRadius: '12px',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-          }
-        }}
-      >
-        <DialogTitle>Contentful Authentication</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" gutterBottom>
-            You need to log in to Contentful to use this tool.
-          </Typography>
-          <Box sx={{ my: 3 }}>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              onClick={async () => {
-                try {
-                  // Получаем URL авторизации
-                  const response = await fetch('/api/contentful-auth-browser', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ action: 'getAuthUrl' }),
-                  });
-                  
-                  const data = await response.json();
-                  
-                  if (data.success && data.authUrl) {
-                    // Открываем URL в новом окне
-                    window.open(data.authUrl, '_blank');
-                    
-                    // Показываем инструкцию
-                    dispatch({ 
-                      type: "SET_STATUS", 
-                      payload: "Please login in the opened Contentful window. After login, copy the token and paste it in the input field." 
-                    });
-                    
-                    // Показываем поле для ввода токена
-                    setShowTokenInput(true);
-                  }
-                } catch (error) {
-                  console.error('Error getting auth URL:', error);
-                  dispatch({ 
-                    type: "SET_STATUS", 
-                    payload: "Error getting auth URL. Please try again." 
-                  });
-                }
-              }}
-              fullWidth
-            >
-              Login to Contentful
-            </Button>
-          </Box>
-          
-          {showTokenInput && (
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="body2" gutterBottom>
-                After logging in, copy the token from the Contentful page and paste it here:
-              </Typography>
-              <TextField
-                fullWidth
-                label="Contentful Token"
-                variant="outlined"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                sx={{ mb: 2 }}
-              />
-              <Button 
-                variant="contained" 
-                color="primary"
-                disabled={!token.trim()}
-                onClick={async () => {
-                  try {
-                    // Сохраняем токен
-                    const response = await fetch('/api/contentful-auth-browser', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({ 
-                        action: 'saveToken', 
-                        token 
-                      }),
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                      // Обновляем статус авторизации
-                      const authResponse = await fetch('/api/check-auth');
-                      const authData = await authResponse.json();
-                      // dispatch({ type: "SET_DATA", payload: { authStatus: authData } });
-                      
-                      if (authData.logged_in) {
-                        handleCloseAuthDialog();
-                        // Обновляем страницу для применения изменений
-                        window.location.reload();
-                      }
-                    }
-                  } catch (error) {
-                    console.error('Error saving token:', error);
-                  }
-                }}
-              >
-                Save Token
-              </Button>
-            </Box>
-          )}
-          
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button onClick={handleCloseAuthDialog}>Close</Button>
-          </Box>
-        </DialogContent>
-      </Dialog>
+      />
 
-      {/* Модальное окно с инструкциями по ошибкам */}
       <JsonLogDisplay
         open={state.errorModalOpen}
         onClose={() => dispatch({ type: "TOGGLE_ERROR_MODAL", payload: false })}
@@ -626,8 +608,6 @@ export default function Home() {
         errorMessage={state.lastErrorMessage || undefined}
         backupFileName={state.errorBackupFile || undefined}
       />
-
-      {/* Модальное окно прогресса восстановления */}
 
     </Container>
   );

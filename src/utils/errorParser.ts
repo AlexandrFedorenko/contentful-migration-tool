@@ -1,7 +1,3 @@
-/**
- * Утилита для парсинга ошибок Contentful и генерации инструкций
- */
-
 export interface ErrorInstruction {
   title: string;
   description: string;
@@ -9,61 +5,7 @@ export interface ErrorInstruction {
   severity: 'warning' | 'error' | 'info';
 }
 
-export class ErrorParser {
-  /**
-   * Парсит ошибку и возвращает инструкции для пользователя
-   */
-  static parseError(errorMessage: string): ErrorInstruction | null {
-    const lowerError = errorMessage.toLowerCase();
-    
-    // Ошибки валидации параметров
-    if (lowerError.includes('required') || lowerError.includes('missing')) {
-      return this.parseValidationError(errorMessage);
-    }
-    
-    // Ошибки Contentful CLI - поле нужно удалить перед добавлением
-    if (lowerError.includes('omit a field before deleting it')) {
-      return this.parseFieldDeletionError(errorMessage);
-    }
-    
-    // Ошибки rate limit
-    if (lowerError.includes('rate limit')) {
-      return this.parseRateLimitError(errorMessage);
-    }
-    
-    // Ошибки связанные с типами контента
-    if (lowerError.includes('content type') && lowerError.includes('not found')) {
-      return this.parseContentTypeError(errorMessage);
-    }
-    
-    // Ошибки связанные с дублированием контента
-    if (lowerError.includes('already exists') || lowerError.includes('duplicate')) {
-      return this.parseDuplicateError(errorMessage);
-    }
-    
-    // Ошибки связанные с локалями
-    if (lowerError.includes('locale') || lowerError.includes('localization')) {
-      return this.parseLocaleError(errorMessage);
-    }
-    
-    // Ошибки связанные с ассетами
-    if (lowerError.includes('asset') || lowerError.includes('image')) {
-      return this.parseAssetError(errorMessage);
-    }
-    
-    // Ошибки связанные с записями
-    if (lowerError.includes('entry') || lowerError.includes('content')) {
-      return this.parseEntryError(errorMessage);
-    }
-    
-    // Общие ошибки
-    return this.parseGenericError(errorMessage);
-  }
-  
-  /**
-   * Парсит ошибки типов контента
-   */
-  private static parseContentTypeError(errorMessage: string): ErrorInstruction {
+function parseContentTypeError(errorMessage: string): ErrorInstruction {
     const contentTypeMatch = errorMessage.match(/content type ['"`]([^'"`]+)['"`]/i);
     const contentType = contentTypeMatch ? contentTypeMatch[1] : 'unknown';
     
@@ -81,10 +23,7 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки дублирования
-   */
-  private static parseDuplicateError(errorMessage: string): ErrorInstruction {
+function parseDuplicateError(errorMessage: string): ErrorInstruction {
     const entityMatch = errorMessage.match(/(content type|entry|asset) ['"`]([^'"`]+)['"`]/i);
     const entityType = entityMatch ? entityMatch[1] : 'item';
     const entityName = entityMatch ? entityMatch[2] : 'unknown';
@@ -103,10 +42,7 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки локалей
-   */
-  private static parseLocaleError(errorMessage: string): ErrorInstruction {
+function parseLocaleError(errorMessage: string): ErrorInstruction {
     return {
       title: 'Locale Configuration Issue',
       description: 'There is a conflict with locale settings between the backup and target environment.',
@@ -121,10 +57,7 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки ассетов
-   */
-  private static parseAssetError(errorMessage: string): ErrorInstruction {
+function parseAssetError(errorMessage: string): ErrorInstruction {
     return {
       title: 'Asset Import Issue',
       description: 'There was a problem importing assets from the backup.',
@@ -139,10 +72,7 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки записей
-   */
-  private static parseEntryError(errorMessage: string): ErrorInstruction {
+function parseEntryError(errorMessage: string): ErrorInstruction {
     return {
       title: 'Entry Import Issue',
       description: 'There was a problem importing content entries from the backup.',
@@ -157,10 +87,7 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки валидации параметров
-   */
-  private static parseValidationError(errorMessage: string): ErrorInstruction {
+function parseValidationError(errorMessage: string): ErrorInstruction {
     return {
       title: 'Missing Required Parameters',
       description: 'Some required parameters are missing for the restore operation.',
@@ -175,78 +102,62 @@ export class ErrorParser {
     };
   }
   
-  /**
-   * Парсит ошибки удаления полей в Contentful
-   */
-  private static parseFieldDeletionError(errorMessage: string): ErrorInstruction {
-    // Извлекаем информацию о конкретном content type из лога
+function parseFieldDeletionError(errorMessage: string): ErrorInstruction {
     const contentTypeMatch = errorMessage.match(/ContentType\s+([^(]+)\s*\(([^)]+)\)/);
-    const contentTypeName = contentTypeMatch ? contentTypeMatch[1].trim() : 'неизвестный Content Type';
-    const contentTypeId = contentTypeMatch ? contentTypeMatch[2] : 'неизвестный ID';
+    const contentTypeName = contentTypeMatch ? contentTypeMatch[1].trim() : 'unknown Content Type';
     
     return {
-      title: 'Поле не может быть удалено',
-      description: `В content type "${contentTypeName}" есть поле, которое нельзя удалить напрямую. Contentful требует сначала сделать поле необязательным.`,
+      title: 'Field Cannot Be Deleted',
+      description: `The content type "${contentTypeName}" has a field that cannot be deleted directly. Contentful requires making the field optional first.`,
       steps: [
-        `1. Откройте Contentful: https://app.contentful.com/spaces/[YOUR_SPACE_ID]/content_types`,
-        `2. Найдите content type "${contentTypeName}"`,
-        `3. Найдите поле, которое нужно удалить`,
-        `4. Сначала установите поле как "необязательное" (optional)`,
-        `5. Сохраните content type`,
-        `6. Затем удалите поле полностью`,
-        `7. Попробуйте восстановить бэкап снова`
+        `1. Open Contentful: https://app.contentful.com/spaces/[YOUR_SPACE_ID]/content_types`,
+        `2. Find the content type "${contentTypeName}"`,
+        `3. Find the field that needs to be deleted`,
+        `4. First, set the field as "optional"`,
+        `5. Save the content type`,
+        `6. Then delete the field completely`,
+        `7. Try restoring the backup again`
       ],
       severity: 'error'
     };
   }
   
-  /**
-   * Парсит ошибки rate limit
-   */
-  private static parseRateLimitError(errorMessage: string): ErrorInstruction {
+function parseRateLimitError(errorMessage: string): ErrorInstruction {
     return {
-      title: 'Превышен лимит запросов',
-      description: 'Contentful временно ограничил количество запросов. Это нормально для больших бэкапов.',
+      title: 'Rate Limit Exceeded',
+      description: 'Contentful has temporarily limited the number of requests. This is normal for large backups.',
       steps: [
-        '1. Подождите несколько минут - система автоматически повторит попытку',
-        '2. Если проблема повторяется, попробуйте восстановить в нерабочее время',
-        '3. Для больших бэкапов процесс может занять больше времени',
-        '4. Это не критическая ошибка - восстановление продолжится автоматически'
+        '1. Wait a few minutes - the system will automatically retry',
+        '2. If the problem persists, try restoring during off-peak hours',
+        '3. For large backups, the process may take longer',
+        '4. This is not a critical error - restoration will continue automatically'
       ],
       severity: 'info'
     };
   }
   
-  /**
-   * Парсит общие ошибки
-   */
-  private static parseGenericError(errorMessage: string): ErrorInstruction {
+function parseGenericError(errorMessage: string): ErrorInstruction {
     return {
-      title: 'Ошибка восстановления',
-      description: 'Произошла неожиданная ошибка при восстановлении бэкапа.',
+      title: 'Restore Error',
+      description: 'An unexpected error occurred while restoring the backup.',
       steps: [
-        '1. Проверьте детали ошибки в сообщении',
-        '2. Убедитесь, что у вас есть права в целевой среде',
-        '3. Проверьте, что файл бэкапа не поврежден',
-        '4. Попробуйте создать новый бэкап и восстановить снова',
-        '5. Обратитесь в поддержку, если проблема повторяется'
+        '1. Check the error details in the message',
+        '2. Make sure you have permissions in the target environment',
+        '3. Verify that the backup file is not corrupted',
+        '4. Try creating a new backup and restoring again',
+        '5. Contact support if the problem persists'
       ],
       severity: 'error'
     };
   }
 
-  /**
-   * Парсит успешные операции с предупреждениями
-   */
-  static parseSuccessWithWarnings(logMessage: string): ErrorInstruction | null {
+export function parseSuccessWithWarnings(logMessage: string): ErrorInstruction | null {
     const lowerLog = logMessage.toLowerCase();
     
-    // Проверяем, есть ли ошибки и предупреждения в успешном логе
     if (lowerLog.includes('errors and') && lowerLog.includes('warnings occurred')) {
-      const errors = [];
-      const warnings = [];
+      const errors: string[] = [];
+      const warnings: string[] = [];
       
-      // Извлекаем ошибки и предупреждения из лога
       const lines = logMessage.split('\n');
       for (const line of lines) {
         if (line.includes('BadRequest:') || line.includes('Error:')) {
@@ -257,58 +168,31 @@ export class ErrorParser {
       }
       
       if (errors.length > 0) {
-        // Парсим первую ошибку для детального отображения
         const firstError = errors[0];
         
-        // Ищем конкретную информацию об ошибке в логе
-        const lines = logMessage.split('\n');
-        let contentTypeName = 'неизвестный Content Type';
+        if (firstError.toLowerCase().includes('omit a field before deleting it')) {
+          return parseFieldDeletionError(firstError);
+        }
         
-        // Ищем строку с ошибкой и информацию о content type
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (line.includes('✖ BadRequest:') && line.includes('omit a field before deleting it')) {
-            // Сначала проверяем саму строку с ошибкой
-            const currentLineMatch = line.match(/ContentType\s+([^(]+)\s*\(([^)]+)\)/);
-            if (currentLineMatch) {
-              contentTypeName = currentLineMatch[1].trim();
-              break;
+        const lines = logMessage.split('\n');
+        for (const line of lines) {
+          if (line.includes('✖ BadRequest:') || line.includes('✖ Error:')) {
+            const specificError = parseSpecificError(line);
+            if (specificError) {
+              return specificError;
             }
-            
-            // Ищем в соседних строках информацию о content type
-            for (let j = Math.max(0, i - 3); j < Math.min(i + 10, lines.length); j++) {
-              const searchLine = lines[j];
-              const match = searchLine.match(/ContentType\s+([^(]+)\s*\(([^)]+)\)/);
-              if (match) {
-                contentTypeName = match[1].trim();
-                break;
-              }
-            }
-            break;
           }
         }
         
-        return {
-          title: `Ошибка в Content Type: ${contentTypeName}`,
-          description: `В content type "${contentTypeName}" есть поле, которое нельзя удалить напрямую. Contentful требует сначала сделать поле необязательным.`,
-          steps: [
-            `1. Откройте Contentful и перейдите к content type "${contentTypeName}"`,
-            '2. Найдите поле, которое нужно удалить',
-            '3. Сначала установите поле как "необязательное" (optional)',
-            '4. Сохраните content type',
-            '5. Затем удалите поле полностью',
-            '6. Попробуйте восстановить бэкап снова'
-          ],
-          severity: 'error'
-        };
+        return parseGenericError(firstError);
       } else if (warnings.length > 0) {
         return {
-          title: 'Восстановление завершено с предупреждениями',
-          description: `Восстановление прошло успешно, но были обнаружены ${warnings.length} предупреждений.`,
+          title: 'Restore Completed with Warnings',
+          description: `Restore completed successfully, but ${warnings.length} warnings were detected.`,
           steps: [
-            '1. Проверьте, что все данные восстановлены корректно',
-            '2. Предупреждения не критичны, но стоит обратить внимание',
-            '3. Создайте новый бэкап после проверки'
+            '1. Verify that all data has been restored correctly',
+            '2. Warnings are not critical, but worth attention',
+            '3. Create a new backup after verification'
           ],
           severity: 'info'
         };
@@ -318,41 +202,35 @@ export class ErrorParser {
     return null;
   }
 
-  /**
-   * Парсит конкретную ошибку из лога
-   */
-  private static parseSpecificError(errorLine: string): ErrorInstruction | null {
-    // Ошибка "You need to omit a field before deleting it"
+function parseSpecificError(errorLine: string): ErrorInstruction | null {
     if (errorLine.includes('You need to omit a field before deleting it')) {
-      // Ищем информацию о content type в логе
       const contentTypeMatch = errorLine.match(/ContentType\s+([^(]+)\s*\(([^)]+)\)/);
-      const contentTypeName = contentTypeMatch ? contentTypeMatch[1].trim() : 'неизвестный Content Type';
+      const contentTypeName = contentTypeMatch ? contentTypeMatch[1].trim() : 'unknown Content Type';
       
       return {
-        title: `Ошибка в Content Type: ${contentTypeName}`,
-        description: `В content type "${contentTypeName}" есть поле, которое нельзя удалить напрямую. Contentful требует сначала сделать поле необязательным.`,
+        title: `Error in Content Type: ${contentTypeName}`,
+        description: `The content type "${contentTypeName}" has a field that cannot be deleted directly. Contentful requires making the field optional first.`,
         steps: [
-          `1. Откройте Contentful и перейдите к content type "${contentTypeName}"`,
-          '2. Найдите поле, которое нужно удалить',
-          '3. Сначала установите поле как "необязательное" (optional)',
-          '4. Сохраните content type',
-          '5. Затем удалите поле полностью',
-          '6. Попробуйте восстановить бэкап снова'
+          `1. Open Contentful and navigate to content type "${contentTypeName}"`,
+          '2. Find the field that needs to be deleted',
+          '3. First, set the field as "optional"',
+          '4. Save the content type',
+          '5. Then delete the field completely',
+          '6. Try restoring the backup again'
         ],
         severity: 'error'
       };
     }
     
-    // Rate limit ошибка
     if (errorLine.includes('Rate limit error')) {
       return {
-        title: 'Превышен лимит запросов',
-        description: 'Contentful временно ограничил количество запросов. Это нормально для больших бэкапов.',
+        title: 'Rate Limit Exceeded',
+        description: 'Contentful has temporarily limited the number of requests. This is normal for large backups.',
         steps: [
-          '1. Подождите несколько минут - система автоматически повторит попытку',
-          '2. Если проблема повторяется, попробуйте восстановить в нерабочее время',
-          '3. Для больших бэкапов процесс может занять больше времени',
-          '4. Это не критическая ошибка - восстановление продолжится автоматически'
+          '1. Wait a few minutes - the system will automatically retry',
+          '2. If the problem persists, try restoring during off-peak hours',
+          '3. For large backups, the process may take longer',
+          '4. This is not a critical error - restoration will continue automatically'
         ],
         severity: 'info'
       };
@@ -361,57 +239,83 @@ export class ErrorParser {
     return null;
   }
 
-  /**
-   * Детальный анализ лога для извлечения конкретных ошибок
-   */
-  static parseDetailedLog(logMessage: string): ErrorInstruction[] {
-    const instructions: ErrorInstruction[] = [];
-    const lines = logMessage.split('\n');
-    
-    for (const line of lines) {
-      // Ищем строки с ошибками
-      if (line.includes('✖ BadRequest:') || line.includes('✖ Error:')) {
-        const instruction = this.parseSpecificError(line);
-        if (instruction) {
-          instructions.push(instruction);
-        }
-      }
-      
-      // Ищем строки с предупреждениями
-      if (line.includes('⚠ Rate limit error')) {
-        const instruction = this.parseSpecificError(line);
-        if (instruction) {
-          instructions.push(instruction);
-        }
+export function parseDetailedLog(logMessage: string): ErrorInstruction[] {
+  const instructions: ErrorInstruction[] = [];
+  const lines = logMessage.split('\n');
+  
+  for (const line of lines) {
+    if (line.includes('✖ BadRequest:') || line.includes('✖ Error:')) {
+      const instruction = parseSpecificError(line);
+      if (instruction) {
+        instructions.push(instruction);
       }
     }
     
-    return instructions;
+    if (line.includes('⚠ Rate limit error')) {
+      const instruction = parseSpecificError(line);
+      if (instruction) {
+        instructions.push(instruction);
+      }
+    }
   }
   
-  /**
-   * Извлекает конкретные имена сущностей из ошибки
-   */
-  static extractEntityNames(errorMessage: string): string[] {
-    const matches = errorMessage.match(/['"`]([^'"`]+)['"`]/g);
-    if (!matches) return [];
-    
-    return matches.map(match => match.replace(/['"`]/g, ''));
+  return instructions;
+}
+
+export function extractEntityNames(errorMessage: string): string[] {
+  const matches = errorMessage.match(/['"`]([^'"`]+)['"`]/g);
+  if (!matches) return [];
+  
+  return matches.map(match => match.replace(/['"`]/g, ''));
+}
+
+export function isCriticalError(errorMessage: string): boolean {
+  const criticalKeywords = [
+    'permission denied',
+    'unauthorized',
+    'invalid token',
+    'space not found',
+    'environment not found'
+  ];
+  
+  const lowerError = errorMessage.toLowerCase();
+  return criticalKeywords.some(keyword => lowerError.includes(keyword));
+}
+
+export function parseError(errorMessage: string): ErrorInstruction | null {
+  const lowerError = errorMessage.toLowerCase();
+  
+  if (lowerError.includes('required') || lowerError.includes('missing')) {
+    return parseValidationError(errorMessage);
   }
   
-  /**
-   * Проверяет, является ли ошибка критической
-   */
-  static isCriticalError(errorMessage: string): boolean {
-    const criticalKeywords = [
-      'permission denied',
-      'unauthorized',
-      'invalid token',
-      'space not found',
-      'environment not found'
-    ];
-    
-    const lowerError = errorMessage.toLowerCase();
-    return criticalKeywords.some(keyword => lowerError.includes(keyword));
+  if (lowerError.includes('omit a field before deleting it')) {
+    return parseFieldDeletionError(errorMessage);
   }
+  
+  if (lowerError.includes('rate limit')) {
+    return parseRateLimitError(errorMessage);
+  }
+  
+  if (lowerError.includes('content type') && lowerError.includes('not found')) {
+    return parseContentTypeError(errorMessage);
+  }
+  
+  if (lowerError.includes('already exists') || lowerError.includes('duplicate')) {
+    return parseDuplicateError(errorMessage);
+  }
+  
+  if (lowerError.includes('locale') || lowerError.includes('localization')) {
+    return parseLocaleError(errorMessage);
+  }
+  
+  if (lowerError.includes('asset') || lowerError.includes('image')) {
+    return parseAssetError(errorMessage);
+  }
+  
+  if (lowerError.includes('entry') || lowerError.includes('content')) {
+    return parseEntryError(errorMessage);
+  }
+  
+  return parseGenericError(errorMessage);
 } 

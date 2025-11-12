@@ -1,5 +1,4 @@
-// src/hooks/useMigration.ts
-import { useCallback } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { api } from "@/utils/api";
 import { useBackups } from "./useBackups";
@@ -12,33 +11,47 @@ interface MigrationResponse {
     targetBackupFile?: string;
 }
 
+interface EnvironmentValidation {
+    spaceId: string;
+    selectedDonor: string;
+    selectedTarget: string;
+}
+
+const validateEnvironments = ({ spaceId, selectedDonor, selectedTarget }: EnvironmentValidation): void => {
+    if (!spaceId || !selectedDonor || !selectedTarget) {
+        throw new Error('Space ID, source and target environments are required');
+    }
+
+    if (selectedDonor === selectedTarget) {
+        throw new Error('Source and target environments must be different');
+    }
+};
+
 export function useMigration() {
     const { state, dispatch } = useGlobalContext();
     const { loadBackups } = useBackups();
     const { setLoading } = useLoading();
+    
+    const stateRef = useRef(state);
+    
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     const handleMigration = useCallback(async () => {
+        const { spaceId, selectedDonor, selectedTarget } = stateRef.current;
+
         try {
-            const { spaceId, selectedDonor, selectedTarget } = state;
-
-            if (!spaceId || !selectedDonor || !selectedTarget) {
-                throw new Error('Space ID, source and target environments are required');
-            }
-
-            if (selectedDonor === selectedTarget) {
-                throw new Error('Source and target environments must be different');
-            }
+            validateEnvironments({ spaceId, selectedDonor, selectedTarget });
 
             dispatch({ 
                 type: "SET_STATUS", 
                 payload: `Starting migration from ${selectedDonor} to ${selectedTarget}...`
             });
 
-            // Устанавливаем состояние загрузки
-            setLoading("loadingMigrate", true);
+            setLoading("loadingMigration", true);
 
             try {
-                // Отправляем запрос на API
                 const response = await api.post<MigrationResponse>('/api/migrate', {
                     spaceId,
                     sourceEnvironment: selectedDonor,
@@ -51,18 +64,14 @@ export function useMigration() {
                         payload: `Migration completed successfully! Created backups: ${response.data?.sourceBackupFile}, ${response.data?.targetBackupFile}`
                     });
                     
-                    // Обновляем список бэкапов
                     await loadBackups(spaceId);
                 } else {
                     throw new Error(response.error || 'Failed to migrate content');
                 }
             } finally {
-                // Сбрасываем состояние загрузки
-                setLoading("loadingMigrate", false);
+                setLoading("loadingMigration", false);
             }
-
         } catch (error) {
-            console.error("❌ Migration error:", error);
             const errorMessage = error instanceof Error ? error.message : 'Failed to migrate content';
             
             dispatch({ 
@@ -70,7 +79,7 @@ export function useMigration() {
                 payload: `Migration failed: ${errorMessage}`
             });
         }
-    }, [state.spaceId, state.selectedDonor, state.selectedTarget, dispatch, loadBackups, setLoading]);
+    }, [dispatch, loadBackups, setLoading]);
 
     return { handleMigration };
 }
