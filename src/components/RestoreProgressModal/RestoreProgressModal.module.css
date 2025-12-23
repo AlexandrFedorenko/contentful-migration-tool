@@ -1,0 +1,80 @@
+.dialogPaper {
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.dialogTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.titleContainer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dialogContent {
+  padding-top: 0;
+}
+
+.progressSection {
+  margin-bottom: 24px;
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.progressBar {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.currentStepBox {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: rgba(25, 118, 210, 0.08);
+  border-radius: 4px;
+}
+
+.currentStepTitle {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.stepsTitle {
+  margin-bottom: 16px;
+  font-weight: bold;
+}
+
+.stepItem {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.stepIcon {
+  min-width: 32px;
+}
+
+.stepPrimary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeInfoBox {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+}
+
+.dialogActions {
+  padding: 0 24px 16px;
+}
+

@@ -1,10 +1,26 @@
-.logo {
-    max-width: 120px;
-    width: 100%;
-    height: auto;
-    padding: 10px 15px;
-    transition: transform 0.2s ease-in-out;
+.logoWrapper {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 10px;
+    background-color: transparent;
+    border: none;
+    text-decoration: none;
+    outline: none;
 }
+
+.logo {
+    transition: opacity 0.2s;
+}
+
 .logo:hover {
-    transform: scale(1.05);
+    opacity: 0.8;
+}
+
+.docLink {
+    color: white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
