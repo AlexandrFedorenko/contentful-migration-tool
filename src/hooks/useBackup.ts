@@ -3,6 +3,7 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { useLoading } from "./useLoading";
 import { handleError } from "@/utils/errorHandler";
 import { useRouter } from 'next/router';
+import { useError } from "@/contexts/ErrorContext";
 
 interface BackupsResponse {
     backups: Array<{
@@ -16,6 +17,7 @@ export function useBackup() {
     const router = useRouter();
     const { state, dispatch } = useGlobalContext();
     const { withLoading } = useLoading();
+    const { showError } = useError();
     const spaceIdRef = useRef(state.spaceId);
 
     useEffect(() => {
@@ -27,7 +29,7 @@ export function useBackup() {
         if (id && typeof id === 'string') {
             dispatch({ type: "SET_SPACE_ID", payload: id });
         }
-    }, [router.query.id, dispatch]);
+    }, [router.query, dispatch]);
 
     const loadBackups = useCallback(async (spaceId: string) => {
         if (!spaceId) return;
@@ -43,12 +45,14 @@ export function useBackup() {
                 payload: { backups: data.backups }
             });
         } catch (error) {
+            const errorMessage = `Failed to load backups: ${handleError(error)}`;
             dispatch({
                 type: "SET_STATUS",
-                payload: `Failed to load backups: ${handleError(error)}`
+                payload: errorMessage
             });
+            showError(errorMessage);
         }
-    }, [dispatch]);
+    }, [dispatch, showError]);
 
     useEffect(() => {
         if (state.spaceId) {
@@ -59,7 +63,7 @@ export function useBackup() {
     const handleBackup = useCallback(async () => {
         const spaceId = spaceIdRef.current;
         const selectedDonor = state.selectedDonor;
-        
+
         if (!spaceId || !selectedDonor) {
             dispatch({
                 type: "SET_STATUS",
@@ -69,9 +73,9 @@ export function useBackup() {
         }
 
         try {
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Starting backup of ${selectedDonor} environment...` 
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Starting backup of ${selectedDonor} environment...`
             });
 
             await withLoading("loadingBackup", async () => {
@@ -94,17 +98,19 @@ export function useBackup() {
 
             await loadBackups(spaceId);
 
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Backup of ${selectedDonor} environment completed successfully` 
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Backup of ${selectedDonor} environment completed successfully`
             });
         } catch (error) {
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Error creating backup: ${handleError(error)}` 
+            const errorMessage = `Error creating backup: ${handleError(error)}`;
+            dispatch({
+                type: "SET_STATUS",
+                payload: errorMessage
             });
+            showError(errorMessage);
         }
-    }, [state.selectedDonor, dispatch, withLoading, loadBackups]);
+    }, [state.selectedDonor, dispatch, withLoading, loadBackups, showError]);
 
     return { handleBackup };
 }

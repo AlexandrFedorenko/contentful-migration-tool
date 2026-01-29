@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { FormControl, InputLabel, Select, MenuItem, FormHelperText, SelectChangeEvent } from '@mui/material';
+import { FormControl, Select, MenuItem, FormHelperText, SelectChangeEvent, Typography, Box, InputLabel } from '@mui/material';
 import { Environment } from '@/types/common';
 
 interface EnvironmentSelectorProps {
@@ -15,24 +15,33 @@ const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({ environments
     onChange(event.target.value);
   }, [onChange]);
 
+  const labelId = `${label.replace(/\s/g, '-').toLowerCase()}-label`;
+  const selectId = label.replace(/\s/g, '-').toLowerCase();
+
   return (
-    <FormControl fullWidth>
-      <InputLabel>{label}</InputLabel>
-      <Select
-        value={value}
-        onChange={handleChange}
-        label={label}
-        disabled={disabled}
-      >
-        {environments.map((env) => (
-          <MenuItem key={env.id} value={env.id}>{env.name}</MenuItem>
-        ))}
-      </Select>
-      <FormHelperText>Select a Contentful environment</FormHelperText>
-    </FormControl>
+    <Box sx={{ mb: 3 }}>
+      <FormControl fullWidth>
+        <InputLabel id={labelId}>{label}</InputLabel>
+        <Select
+          labelId={labelId}
+          id={selectId}
+          value={value}
+          onChange={handleChange}
+          disabled={disabled}
+          label={label}
+        >
+          <MenuItem value="">
+            <em>Select a Contentful environment</em>
+          </MenuItem>
+          {environments.map((env) => (
+            <MenuItem key={env.id} value={env.id}>{env.name}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Box>
   );
 });
 
 EnvironmentSelector.displayName = 'EnvironmentSelector';
 
-export default EnvironmentSelector; 
+export default EnvironmentSelector;

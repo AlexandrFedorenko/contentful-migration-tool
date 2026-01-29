@@ -12,7 +12,7 @@ const ProductionWarning: React.FC = () => {
           ⚠️ Beta Testing Notice
         </Typography>
         <Typography>
-          This application is currently in <strong>beta testing</strong>. While we strive for reliability, 
+          This application is currently in <strong>beta testing</strong>. While we strive for reliability,
           please exercise caution when performing operations, especially on production environments.
         </Typography>
       </Alert>
@@ -23,11 +23,11 @@ const ProductionWarning: React.FC = () => {
           Critical: Backup Before Production Operations
         </Typography>
         <Typography paragraph sx={{ mt: 2 }}>
-          Before performing <strong>any</strong> migration, restore, or content modification operations on 
+          Before performing <strong>any</strong> migration, restore, or content modification operations on
           production environments, you <strong>must</strong> create a backup.
         </Typography>
         <Typography paragraph>
-          Production data is critical and cannot be easily recovered. Always verify that backups exist 
+          Production data is critical and cannot be easily recovered. Always verify that backups exist
           and are accessible before proceeding with any operations.
         </Typography>
       </Paper>
@@ -50,7 +50,7 @@ const ProductionWarning: React.FC = () => {
             <StepLabel>Create Fresh Backup</StepLabel>
             <StepContent>
               <Typography>
-                Create a new backup of the production environment before making any changes. 
+                Create a new backup of the production environment before making any changes.
                 This ensures you have a recent recovery point.
               </Typography>
             </StepContent>
@@ -72,7 +72,7 @@ const ProductionWarning: React.FC = () => {
             <StepLabel>Test in Non-Production First</StepLabel>
             <StepContent>
               <Typography>
-                If possible, test your migration/restore operations in a development or staging 
+                If possible, test your migration/restore operations in a development or staging
                 environment first to identify any potential issues.
               </Typography>
             </StepContent>
@@ -84,8 +84,8 @@ const ProductionWarning: React.FC = () => {
                 Keep a record of:
               </Typography>
               <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>Which environments you're working with</li>
-                <li>What operations you're performing</li>
+                <li>Which environments you&apos;re working with</li>
+                <li>What operations you&apos;re performing</li>
                 <li>Backup file names and locations</li>
                 <li>Any errors encountered</li>
               </Box>
@@ -101,7 +101,7 @@ const ProductionWarning: React.FC = () => {
         </Typography>
         <Box component="ul" sx={{ pl: 2 }}>
           <li>
-            <strong>Always backup before restore:</strong> Even when restoring from a backup, 
+            <strong>Always backup before restore:</strong> Even when restoring from a backup,
             create a backup of the current state first
           </li>
           <li>
@@ -111,7 +111,7 @@ const ProductionWarning: React.FC = () => {
             <strong>Verify backups regularly:</strong> Periodically check that your backup files are valid and accessible
           </li>
           <li>
-            <strong>Keep multiple backups:</strong> Don't rely on a single backup - keep multiple versions
+            <strong>Keep multiple backups:</strong> Don&apos;t rely on a single backup - keep multiple versions
           </li>
           <li>
             <strong>Monitor operations:</strong> Watch the status messages and error logs during operations
@@ -131,7 +131,7 @@ const ProductionWarning: React.FC = () => {
         </Typography>
         <Box component="ol" sx={{ pl: 2 }}>
           <li>
-            <strong>Stop immediately:</strong> Don't continue with additional operations
+            <strong>Stop immediately:</strong> Don&apos;t continue with additional operations
           </li>
           <li>
             <strong>Check the error message:</strong> Review the error modal for detailed instructions
@@ -153,7 +153,7 @@ const ProductionWarning: React.FC = () => {
 
       <Alert severity="info" sx={{ mt: 3 }}>
         <Typography variant="body2">
-          <strong>Remember:</strong> It's always better to be cautious and create multiple backups 
+          <strong>Remember:</strong> It&apos;s always better to be cautious and create multiple backups
           than to risk losing production data. When in doubt, create a backup first.
         </Typography>
       </Alert>

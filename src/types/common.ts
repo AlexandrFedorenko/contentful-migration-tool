@@ -3,6 +3,11 @@ export interface Environment {
   name: string;
   createdAt?: string;
 }
+export interface Environment {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
 
 export interface Space {
   id: string;
@@ -21,15 +26,10 @@ export interface LoadingState {
   loadingAnalyze: boolean;
   loadingCustomMigrate: boolean;
   loadingCustomRestore: boolean;
-}
-
-export interface ContentType {
-  id: string;
-  name: string;
-  isNew: boolean;
-  isModified: boolean;
+  loadingRename: boolean;
+  isModified?: boolean;
   hasNewContent?: boolean;
   newContentCount?: number;
 }
 
-export type LoadingKeys = keyof LoadingState; 
+export type LoadingKeys = keyof LoadingState;

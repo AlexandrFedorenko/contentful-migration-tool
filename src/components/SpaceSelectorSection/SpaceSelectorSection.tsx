@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, Typography, Box, Checkbox, FormControlLabel } from '@mui/material';
+import { Paper, Typography, Box, Radio, RadioGroup, FormControlLabel, Divider } from '@mui/material';
 import SpaceSelector from '@/components/SpaceSelector/SpaceSelector';
 import { GlobalState } from '@/context/GlobalContext';
 
@@ -20,46 +20,70 @@ const SpaceSelectorSection = React.memo(({
   customRestoreMode,
   customMigrateMode
 }: SpaceSelectorSectionProps) => {
+
+  const currentMode = state.restoreMode
+    ? 'restore'
+    : customRestoreMode
+      ? 'customRestore'
+      : customMigrateMode
+        ? 'customMigrate'
+        : 'default';
+
+  const handleModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+
+    // Reset all first
+    onRestoreModeChange(false);
+    onCustomRestoreModeChange(false);
+    onCustomMigrateModeChange(false);
+
+    // Set new mode
+    if (value === 'restore') onRestoreModeChange(true);
+    if (value === 'customRestore') onCustomRestoreModeChange(true);
+    if (value === 'customMigrate') onCustomMigrateModeChange(true);
+  };
+
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
+    <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="h6" sx={{ mb: 1 }}>
         Select Space
       </Typography>
-      <SpaceSelector />
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={!!state.restoreMode}
-              onChange={e => onRestoreModeChange(e.target.checked)}
-              color="primary"
-              disabled={customRestoreMode || customMigrateMode}
-            />
-          }
-          label="Restore"
-        />
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={customRestoreMode}
-              onChange={e => onCustomRestoreModeChange(e.target.checked)}
-              color="secondary"
-              disabled={customMigrateMode}
-            />
-          }
-          label="Custom Restore"
-        />
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={customMigrateMode}
-              onChange={e => onCustomMigrateModeChange(e.target.checked)}
-              color="primary"
-            />
-          }
-          label="Custom Migrate"
-        />
+
+      <Divider sx={{ mb: 2 }} />
+
+      <Box sx={{ mb: 3, mt: 3 }}>
+        <SpaceSelector />
       </Box>
+
+      {state.spaceId && (
+        <>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Operation Mode
+          </Typography>
+
+          <RadioGroup
+            value={currentMode}
+            onChange={handleModeChange}
+          >
+            <FormControlLabel
+              value="default"
+              control={<Radio />}
+              label="Create Backup"
+            />
+            <FormControlLabel
+              value="restore"
+              control={<Radio />}
+              label="Restore"
+            />
+            <FormControlLabel
+              value="customRestore"
+              control={<Radio />}
+              label="Custom Restore"
+            />
+
+          </RadioGroup>
+        </>
+      )}
     </Paper>
   );
 });
@@ -67,4 +91,3 @@ const SpaceSelectorSection = React.memo(({
 SpaceSelectorSection.displayName = 'SpaceSelectorSection';
 
 export default SpaceSelectorSection;
-

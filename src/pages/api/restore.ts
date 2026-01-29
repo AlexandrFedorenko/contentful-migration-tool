@@ -1,11 +1,256 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ContentfulCLI } from '@/utils/contentful-cli';
 import { RestoreResponse } from '@/types/api';
+import * as fs from 'fs';
+import * as path from 'path';
+import { createClient } from 'contentful-management';
+import { ContentfulManagement } from '@/utils/contentful-management';
 
 interface RestoreRequest {
-  spaceId: string;
-  fileName: string;
-  targetEnvironment: string;
+    spaceId: string;
+    fileName: string;
+    targetEnvironment: string;
+    fileContent?: any; // Optional: Direct file content for temp files
+    clearEnvironment?: boolean; // Optional: Clear target environment before restore
+    options?: {
+        locales?: string[];
+        contentTypes?: string[];
+    };
+}
+
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: '50mb',
+        },
+    },
+};
+
+// Helper function to filter backup content based on options
+function filterBackupContent(content: any, options: { locales?: string[]; contentTypes?: string[] }): any {
+    const filtered = { ...content };
+
+    // Filter locales
+    if (options.locales && options.locales.length > 0) {
+        filtered.locales = filtered.locales?.filter((locale: any) =>
+            options.locales!.includes(locale.code)
+        );
+    }
+
+    // Filter content types
+    if (options.contentTypes && options.contentTypes.length > 0) {
+        filtered.contentTypes = filtered.contentTypes?.filter((ct: any) =>
+            options.contentTypes!.includes(ct.sys.id)
+        );
+
+        // Filter entries to only include those of selected content types
+        filtered.entries = filtered.entries?.filter((entry: any) =>
+            options.contentTypes!.includes(entry.sys.contentType.sys.id)
+        );
+
+        // Filter editor interfaces
+        if (filtered.editorInterfaces) {
+            filtered.editorInterfaces = filtered.editorInterfaces.filter((ei: any) =>
+                options.contentTypes!.includes(ei.sys.contentType.sys.id)
+            );
+        }
+    }
+
+    // Filter Assets AND Referenced Entries (Recursive Dependency Resolution)
+    if (options.contentTypes && options.contentTypes.length > 0 && filtered.entries && content.entries) {
+        const usedAssetIds = new Set<string>();
+        const usedEntryIds = new Set<string>(filtered.entries.map((e: any) => e.sys.id));
+        const entriesMap = new Map(content.entries.map((e: any) => [e.sys.id, e]));
+
+        // Queue for processing entries (start with the ones selected by content type)
+        // We iterate through this queue, appending new dependencies as we find them
+        const entriesQueue = [...filtered.entries];
+
+        const processEntry = (entry: any) => {
+            const traverse = (obj: any) => {
+                if (!obj || typeof obj !== 'object') return;
+
+                if (Array.isArray(obj)) {
+                    obj.forEach(traverse);
+                    return;
+                }
+
+                // Asset Link
+                if (obj.sys && obj.sys.type === 'Link' && obj.sys.linkType === 'Asset') {
+                    usedAssetIds.add(obj.sys.id);
+                }
+
+                // Entry Link
+                if (obj.sys && obj.sys.type === 'Link' && obj.sys.linkType === 'Entry') {
+                    const linkedEntryId = obj.sys.id;
+                    if (!usedEntryIds.has(linkedEntryId)) {
+                        const linkedEntry = entriesMap.get(linkedEntryId);
+                        if (linkedEntry) {
+                            usedEntryIds.add(linkedEntryId);
+                            entriesQueue.push(linkedEntry); // Add to queue to process ITS dependencies
+                            filtered.entries.push(linkedEntry); // Add to result list
+                        }
+                    }
+                }
+
+                // Rich Text Links (Embedded Asset/Entry)
+                if (obj.nodeType === 'embedded-asset-block' && obj.data?.target?.sys?.id) {
+                    usedAssetIds.add(obj.data.target.sys.id);
+                }
+                if ((obj.nodeType === 'embedded-entry-block' || obj.nodeType === 'embedded-entry-inline') && obj.data?.target?.sys?.id) {
+                    const linkedEntryId = obj.data.target.sys.id;
+                    if (!usedEntryIds.has(linkedEntryId)) {
+                        const linkedEntry = entriesMap.get(linkedEntryId);
+                        if (linkedEntry) {
+                            usedEntryIds.add(linkedEntryId);
+                            entriesQueue.push(linkedEntry);
+                            filtered.entries.push(linkedEntry);
+                        }
+                    }
+                }
+
+                Object.values(obj).forEach(traverse);
+            };
+
+            // Traverse fields
+            if (entry.fields) {
+                traverse(entry.fields);
+            }
+        };
+
+        // Process queue until empty (BFS for dependencies)
+        let processedIndex = 0;
+        while (processedIndex < entriesQueue.length) {
+            processEntry(entriesQueue[processedIndex]);
+            processedIndex++;
+        }
+
+        console.log(`[RESTORE] Dependency resolution complete. Total entries: ${usedEntryIds.size}, Total assets: ${usedAssetIds.size}`);
+
+        // Filter Assets based on collected IDs
+        if (filtered.assets) {
+            const originalCount = filtered.assets.length;
+            filtered.assets = filtered.assets.filter((asset: any) => usedAssetIds.has(asset.sys.id));
+            console.log(`[RESTORE] Filtered assets from ${originalCount} to ${filtered.assets.length}`);
+        }
+
+        // Update Content Types and Editor Interfaces to include those used by ALL collected entries
+        // (Original selection + Recursive dependencies)
+        const requiredContentTypeIds = new Set<string>();
+        filtered.entries.forEach((entry: any) => {
+            if (entry.sys?.contentType?.sys?.id) {
+                requiredContentTypeIds.add(entry.sys.contentType.sys.id);
+            }
+        });
+
+        console.log(`[RESTORE] Required Content Types: ${requiredContentTypeIds.size}`);
+
+        if (content.contentTypes) {
+            filtered.contentTypes = content.contentTypes.filter((ct: any) =>
+                requiredContentTypeIds.has(ct.sys.id)
+            );
+        }
+
+        if (content.editorInterfaces) {
+            filtered.editorInterfaces = content.editorInterfaces.filter((ei: any) =>
+                requiredContentTypeIds.has(ei.sys.contentType.sys.id)
+            );
+        }
+    }
+
+    // Strict Locale Stripping
+    // If specific locales are selected, we must remove all other locale keys from fields
+    if (options.locales && options.locales.length > 0) {
+        const allowedLocales = new Set(options.locales);
+
+        const stripLocales = (item: any) => {
+            if (item.fields) {
+                Object.keys(item.fields).forEach(fieldName => {
+                    const field = item.fields[fieldName];
+                    if (field && typeof field === 'object') {
+                        Object.keys(field).forEach(locale => {
+                            if (!allowedLocales.has(locale)) {
+                                delete field[locale];
+                            }
+                        });
+                    }
+                });
+            }
+        };
+
+        if (filtered.entries) filtered.entries.forEach(stripLocales);
+        if (filtered.assets) filtered.assets.forEach(stripLocales);
+    }
+
+    return filtered;
+}
+
+// Helper function to transform locale in backup content
+function transformBackupLocales(content: any, fromLocale: string, toLocale: string) {
+    console.log(`[RESTORE] Transforming content from locale '${fromLocale}' to '${toLocale}'`);
+
+    // Deep clone to avoid mutating original if needed
+    const newContent = JSON.parse(JSON.stringify(content));
+
+    // 1. Update Locales definition
+    if (newContent.locales) {
+        newContent.locales = newContent.locales.map((loc: any) => {
+            if (loc.code === fromLocale) {
+                return { ...loc, code: toLocale };
+            }
+            return loc;
+        });
+    }
+
+    // 2. Update Entries
+    if (newContent.entries) {
+        newContent.entries.forEach((entry: any) => {
+            if (entry.fields) {
+                Object.keys(entry.fields).forEach(fieldName => {
+                    const field = entry.fields[fieldName];
+                    if (field[fromLocale] !== undefined) {
+                        field[toLocale] = field[fromLocale];
+                        delete field[fromLocale];
+                    }
+                });
+            }
+        });
+    }
+
+    // 3. Update Assets
+    if (newContent.assets) {
+        newContent.assets.forEach((asset: any) => {
+            if (asset.fields) {
+                Object.keys(asset.fields).forEach(fieldName => {
+                    const field = asset.fields[fieldName];
+                    if (field[fromLocale] !== undefined) {
+                        field[toLocale] = field[fromLocale];
+                        delete field[fromLocale];
+                    }
+                });
+            }
+        });
+    }
+
+    // 4. Update Content Types (for default values in fields)
+    if (newContent.contentTypes) {
+        newContent.contentTypes.forEach((ct: any) => {
+            if (ct.fields) {
+                ct.fields.forEach((field: any) => {
+                    if (field.defaultValue && typeof field.defaultValue === 'object') {
+                        Object.keys(field.defaultValue).forEach(locale => {
+                            if (locale === fromLocale) {
+                                field.defaultValue[toLocale] = field.defaultValue[fromLocale];
+                                delete field.defaultValue[fromLocale];
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    return newContent;
 }
 
 export default async function handler(
@@ -13,29 +258,167 @@ export default async function handler(
     res: NextApiResponse<RestoreResponse>
 ) {
     if (req.method !== "POST") {
-        return res.status(405).json({ 
+        return res.status(405).json({
             success: false,
-            error: "Method not allowed" 
+            error: "Method not allowed"
         });
     }
 
-    const { spaceId, fileName, targetEnvironment }: RestoreRequest = req.body;
+    const { spaceId, fileName, targetEnvironment, options, fileContent, clearEnvironment }: RestoreRequest = req.body;
 
     if (!spaceId || !fileName || !targetEnvironment) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
-            error: "Space ID, file name and target environment are required" 
+            error: "Space ID, file name and target environment are required"
         });
     }
 
+    let tempFilePath: string | null = null;
+
     try {
-        await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
-        return res.status(200).json({ 
-            success: true 
+        // 1. Handle "Clear Environment" if requested
+        if (clearEnvironment) {
+            const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
+            if (!token) {
+                throw new Error("Management token not found. Please log in again.");
+            }
+
+            const client = createClient({ accessToken: token });
+            const space = await client.getSpace(spaceId);
+            const environment = await space.getEnvironment(targetEnvironment);
+
+            // Delete all entries
+            const entries = await environment.getEntries({ limit: 1000 });
+            for (const entry of entries.items) {
+                if (entry.isPublished()) {
+                    await entry.unpublish();
+                }
+                await entry.delete();
+            }
+
+            // Delete all assets
+            const assets = await environment.getAssets({ limit: 1000 });
+            for (const asset of assets.items) {
+                if (asset.isPublished()) {
+                    await asset.unpublish();
+                }
+                await asset.delete();
+            }
+
+            // Delete all content types
+            const contentTypes = await environment.getContentTypes({ limit: 1000 });
+            for (const ct of contentTypes.items) {
+                if (ct.isPublished()) {
+                    await ct.unpublish();
+                }
+                await ct.delete();
+            }
+
+            // Note: We are NOT deleting locales as that might break things more than intended, 
+            // and usually you want to keep locales.
+        }
+
+        let fileToRestore = fileName;
+        let backupContent: any = null;
+
+        // 2. Determine source data
+        if (fileContent) {
+            // Content provided directly (from preview page or temp file)
+            backupContent = typeof fileContent === 'string'
+                ? JSON.parse(fileContent)
+                : fileContent;
+        } else if (options && (options.locales || options.contentTypes)) {
+            // Need to read from file for filtering
+            const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
+
+            if (!fs.existsSync(backupFilePath)) {
+                throw new Error(`Backup file not found: ${backupFilePath}`);
+            }
+
+            backupContent = JSON.parse(fs.readFileSync(backupFilePath, 'utf-8'));
+        }
+
+        // 3. Apply filtering if options are provided
+        if (backupContent && options && (options.locales || options.contentTypes)) {
+            console.log('[RESTORE] Applying filtering with options:', {
+                locales: options.locales,
+                contentTypes: options.contentTypes,
+                originalLocalesCount: backupContent.locales?.length,
+                originalContentTypesCount: backupContent.contentTypes?.length,
+                originalEntriesCount: backupContent.entries?.length
+            });
+            backupContent = filterBackupContent(backupContent, options);
+            console.log('[RESTORE] After filtering:', {
+                filteredLocalesCount: backupContent.locales?.length,
+                filteredContentTypesCount: backupContent.contentTypes?.length,
+                filteredEntriesCount: backupContent.entries?.length
+            });
+        }
+
+        // 3.5 Check for Locale Mismatch and Transform if needed
+        if (backupContent) {
+            try {
+                const targetLocales = await ContentfulManagement.getLocales(spaceId, targetEnvironment);
+                const targetDefaultLocale = targetLocales.find((l: any) => l.default)?.code;
+
+                // Find default locale in backup content
+                // If backupContent.locales exists, use it. Otherwise assume 'en' or try to infer.
+                // Usually backups include a 'locales' array.
+                const sourceDefaultLocale = backupContent.locales?.find((l: any) => l.default)?.code;
+
+                if (targetDefaultLocale && sourceDefaultLocale && targetDefaultLocale !== sourceDefaultLocale) {
+                    console.log(`[RESTORE] Detected locale mismatch. Source: ${sourceDefaultLocale}, Target: ${targetDefaultLocale}`);
+                    backupContent = transformBackupLocales(backupContent, sourceDefaultLocale, targetDefaultLocale);
+                }
+            } catch (error) {
+                console.warn('[RESTORE] Failed to check/transform locales:', error);
+                // Continue anyway, maybe it works or fails with CLI error
+            }
+        }
+
+        // 4. Write to temp file if we have modified content
+        if (backupContent) {
+            const tempFileName = `temp-filtered-${Date.now()}-${fileName}`;
+            const backupDir = path.join(process.cwd(), 'backups', spaceId);
+
+            if (!fs.existsSync(backupDir)) {
+                fs.mkdirSync(backupDir, { recursive: true });
+            }
+
+            tempFilePath = path.join(backupDir, tempFileName);
+            console.log('[RESTORE] Writing filtered content to temp file:', tempFilePath);
+            fs.writeFileSync(tempFilePath, JSON.stringify(backupContent, null, 2));
+            fileToRestore = tempFileName;
+        } else {
+            console.log('[RESTORE] No backupContent to filter, using original file:', fileToRestore);
+        }
+
+        // 5. Perform Restore
+        console.log('[RESTORE] Starting restore with file:', fileToRestore);
+        const restoreResult = await ContentfulCLI.restoreBackup(
+            spaceId,
+            fileToRestore,
+            targetEnvironment,
+            (msg) => console.log('[CONTENTFUL-CLI]', msg)
+        );
+
+
+        // Cleanup temporary file if created
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+
+        return res.status(200).json({
+            success: true
         });
     } catch (error) {
-        return res.status(500).json({ 
-            success: false, 
+        // Cleanup on error too
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+            try { fs.unlinkSync(tempFilePath); } catch { }
+        }
+
+        return res.status(500).json({
+            success: false,
             error: error instanceof Error ? error.message : 'Failed to restore backup'
         });
     }

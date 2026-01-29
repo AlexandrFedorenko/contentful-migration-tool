@@ -6,18 +6,18 @@ import LoginFormView from './LoginFormView';
 import { useAuthMessageHandler } from '@/hooks/useAuthMessageHandler';
 
 const ContentfulBrowserAuth = React.memo(() => {
-    const { 
-        isLoggedIn, 
+    const {
+        isLoggedIn,
         isLoading: hookLoading,
-        authUrl, 
-        token, 
-        setToken, 
-        saveToken, 
-        logout, 
+        authUrl,
+        token,
+        setToken,
+        saveToken,
+        logout,
         checkAuthStatus,
         setAuthUrl
     } = useAuth();
-    
+
     const [error, setError] = useState<string>('');
     const [loginStarted, setLoginStarted] = useState<boolean>(false);
     const [localLoading, setLocalLoading] = useState(false);
@@ -29,7 +29,7 @@ const ContentfulBrowserAuth = React.memo(() => {
             setError('Please enter a valid token');
             return;
         }
-        
+
         setLocalLoading(true);
         try {
             await saveToken(token);
@@ -44,17 +44,17 @@ const ContentfulBrowserAuth = React.memo(() => {
     const handleLogout = useCallback(async () => {
         setError('');
         setLocalLoading(true);
-        
+
         try {
-            const timeoutPromise = new Promise((_, reject) => 
+            const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Logout timed out')), 15000)
             );
-            
+
             await Promise.race([
                 logout(),
                 timeoutPromise
             ]);
-            
+
             await checkAuthStatus();
             setLoginStarted(false);
         } catch (err) {
@@ -69,18 +69,18 @@ const ContentfulBrowserAuth = React.memo(() => {
     const handleFullReset = useCallback(async () => {
         setError('');
         setLocalLoading(true);
-        
+
         try {
             const response = await fetch('/api/reset-auth', {
                 method: 'POST',
             });
-            
+
             const data = await response.json();
-            
+
             if (!data.success) {
                 throw new Error(data.message);
             }
-            
+
             await checkAuthStatus();
             setLoginStarted(false);
         } catch (err) {
@@ -95,7 +95,7 @@ const ContentfulBrowserAuth = React.memo(() => {
         try {
             setError('');
             setLocalLoading(true);
-            
+
             const response = await fetch('/api/contentful-auth-browser', {
                 method: 'POST',
                 headers: {
@@ -103,17 +103,17 @@ const ContentfulBrowserAuth = React.memo(() => {
                 },
                 body: JSON.stringify({ action: 'getAuthUrl' }),
             });
-            
+
             const data = await response.json();
-            
+
             if (!data.success) {
                 throw new Error(data.message || 'Failed to get auth URL');
             }
-            
+
             if (!data.authUrl || !data.authUrl.startsWith('https://')) {
                 throw new Error('Invalid auth URL received from server');
             }
-            
+
             setAuthUrl(data.authUrl);
             setLoginStarted(true);
             window.open(data.authUrl, '_blank');
@@ -133,18 +133,18 @@ const ContentfulBrowserAuth = React.memo(() => {
 
     const openAuthWindow = useCallback(() => {
         if (!authUrl) return;
-        
+
         const width = 800;
         const height = 600;
         const left = window.screenX + (window.outerWidth - width) / 2;
         const top = window.screenY + (window.outerHeight - height) / 2;
-        
+
         const authWindow = window.open(
             authUrl,
             'contentful-auth',
             `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
         );
-        
+
         if (!authWindow) {
             setError('Popup blocked! Please allow popups for this site.');
         } else {
@@ -163,7 +163,6 @@ const ContentfulBrowserAuth = React.memo(() => {
         return (
             <LoggedInView
                 onLogout={handleLogout}
-                onFullReset={handleFullReset}
                 isLoading={isLoading}
             />
         );

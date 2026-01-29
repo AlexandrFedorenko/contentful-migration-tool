@@ -1,25 +1,22 @@
 {
   "name": "contentful-migration-tool",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Desktop migration tool for Contentful CMS",
+  "main": "electron/main.js",
+  "author": "Your Name",
+  "license": "MIT",
   "scripts": {
     "setup": "node setup.js",
-    "dev": "next dev",
-    "watch": "next dev",
-    "dev:docker": "WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "docker:build": "docker build -t contentful-migration-tool .",
-    "docker:start": "docker-compose up -d",
-    "docker:stop": "docker-compose down",
-    "docker:dev": "docker-compose -f docker-compose.dev.yml up",
-    "docker:dev:build": "docker-compose -f docker-compose.dev.yml up --build",
-    "docker:dev:watch": "docker-compose -f docker-compose.dev.yml up --build",
-    "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f",
-    "docker:clean": "docker-compose -f docker-compose.dev.yml down -v --remove-orphans",
-    "docker:restart": "docker-compose -f docker-compose.dev.yml restart"
+    "next:dev": "next dev",
+    "next:build": "next build",
+    "next:start": "next start",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "dev": "concurrently \"npm run next:dev\" \"wait-on http://localhost:3000 && npm run electron:dev\"",
+    "build": "npm run next:build && electron-builder",
+    "build:win": "npm run next:build && electron-builder --win",
+    "build:mac": "npm run next:build && electron-builder --mac",
+    "build:linux": "npm run next:build && electron-builder --linux",
+    "lint": "next lint"
   },
   "dependencies": {
     "@emotion/react": "^11.11.0",
@@ -35,6 +32,7 @@
     "dotenv": "^16.5.0",
     "eslint": "8.40.0",
     "eslint-config-next": "13.4.2",
+    "jsondiffpatch": "^0.7.3",
     "next": "13.4.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -44,6 +42,51 @@
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.2",
-    "@types/uuid": "^9.0.1"
+    "@types/uuid": "^9.0.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.contentful.migrationtool",
+    "productName": "Contentful Migration Tool",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "public/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

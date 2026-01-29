@@ -1,0 +1,129 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { ContentfulManagement } from "@/utils/contentful-management";
+
+interface ScanRequest {
+    spaceId: string;
+    sourceEnvironment: string;
+    targetEnvironment: string;
+    contentTypeId: string;
+}
+
+interface ScanResultItem {
+    id: string;
+    title: string;
+    status: 'changed' | 'new' | 'equal';
+    sourceVersion?: number;
+    targetVersion?: number;
+    sourceUpdatedAt?: string;
+    targetUpdatedAt?: string;
+}
+
+interface ScanResponse {
+    success: boolean;
+    items?: ScanResultItem[];
+    error?: string;
+}
+
+export default async function handler(
+    req: NextApiRequest,
+    res: NextApiResponse<ScanResponse>
+) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, error: 'Method not allowed' });
+    }
+
+    try {
+        const { spaceId, sourceEnvironment, targetEnvironment, contentTypeId } = req.body as ScanRequest;
+
+        if (!spaceId || !sourceEnvironment || !targetEnvironment || !contentTypeId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields'
+            });
+        }
+
+        // 1. Fetch Source Entries (Stream)
+        const sourceIterator = ContentfulManagement.getEntriesIterator(spaceId, sourceEnvironment);
+        const targetEntriesMap = new Map<string, any>();
+
+        // 2. Fetch Target Entries (Stream) - Optimization: We could just fetch headers
+        // For now, let's fetch target entries into a Map for quick lookup.
+        // In a real huge dataset, we might need to stream both and sort, but Map is fine for 10k items if we only store headers.
+        const targetIterator = ContentfulManagement.getEntriesIterator(spaceId, targetEnvironment);
+
+        for await (const batch of targetIterator) {
+            for (const entry of batch) {
+                if (entry.sys.contentType.sys.id === contentTypeId) {
+                    targetEntriesMap.set(entry.sys.id, entry);
+                }
+            }
+        }
+
+        const results: ScanResultItem[] = [];
+
+        // 3. Compare
+        for await (const batch of sourceIterator) {
+            for (const sourceEntry of batch) {
+                if (sourceEntry.sys.contentType.sys.id !== contentTypeId) continue;
+
+                const targetEntry = targetEntriesMap.get(sourceEntry.sys.id);
+                const title = getEntryTitle(sourceEntry);
+
+                if (!targetEntry) {
+                    results.push({
+                        id: sourceEntry.sys.id,
+                        title,
+                        status: 'new',
+                        sourceVersion: sourceEntry.sys.version,
+                        sourceUpdatedAt: sourceEntry.sys.updatedAt
+                    });
+                } else {
+                    // Compare versions or updatedAt
+                    // Note: Version numbers might differ if edits happened independently.
+                    // Better to compare updatedAt or publishedVersion if available.
+                    // For strict equality, we might need deep comparison, but for "Scan" we use heuristics.
+
+                    const isModified = sourceEntry.sys.version !== targetEntry.sys.version ||
+                        sourceEntry.sys.updatedAt !== targetEntry.sys.updatedAt;
+
+                    results.push({
+                        id: sourceEntry.sys.id,
+                        title,
+                        status: isModified ? 'changed' : 'equal',
+                        sourceVersion: sourceEntry.sys.version,
+                        targetVersion: targetEntry.sys.version,
+                        sourceUpdatedAt: sourceEntry.sys.updatedAt,
+                        targetUpdatedAt: targetEntry.sys.updatedAt
+                    });
+                }
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            items: results
+        });
+
+    } catch (error) {
+        console.error('Scan failed:', error);
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+}
+
+function getEntryTitle(entry: any): string {
+    if (entry.fields?.title) {
+        // Handle localized title
+        const titleVal = entry.fields.title;
+        if (typeof titleVal === 'string') return titleVal;
+        if (typeof titleVal === 'object') return Object.values(titleVal)[0] as string || 'Untitled';
+    }
+    if (entry.fields?.name) {
+        const nameVal = entry.fields.name;
+        if (typeof nameVal === 'string') return nameVal;
+        if (typeof nameVal === 'object') return Object.values(nameVal)[0] as string || 'Untitled';
+    }
+    return entry.sys.id;
+}

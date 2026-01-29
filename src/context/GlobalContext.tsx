@@ -35,12 +35,13 @@ export interface GlobalState {
     errorBackupFile: string | null;
     errorInstructions: ErrorInstruction[];
     restoreProgress: {
-      isActive: boolean;
-      steps: RestoreStep[];
-      currentStep: number;
-      overallProgress: number;
-      restoringBackupName?: string;
+        isActive: boolean;
+        steps: RestoreStep[];
+        currentStep: number;
+        overallProgress: number;
+        restoringBackupName?: string;
     };
+    logs: string[];
 }
 
 const initialState: GlobalState = {
@@ -70,6 +71,7 @@ const initialState: GlobalState = {
         loadingAnalyze: false,
         loadingCustomMigrate: false,
         loadingCustomRestore: false,
+        loadingRename: false,
     },
     errors: {},
     restoreMode: false,
@@ -79,14 +81,15 @@ const initialState: GlobalState = {
     errorBackupFile: null,
     errorInstructions: [],
     restoreProgress: {
-      isActive: false,
-      steps: [],
-      currentStep: 0,
-      overallProgress: 0
-    }
+        isActive: false,
+        steps: [],
+        currentStep: 0,
+        overallProgress: 0
+    },
+    logs: []
 };
 
-type Action = 
+type Action =
     | { type: "SET_SPACE_ID"; payload: string }
     | { type: "SET_SOURCE_ENV"; payload: string }
     | { type: "SET_TARGET_ENV"; payload: string }
@@ -106,7 +109,9 @@ type Action =
     | { type: "CLEAR_ERROR_INSTRUCTION" }
     | { type: "TOGGLE_ERROR_MODAL"; payload: boolean }
     | { type: "SET_RESTORE_PROGRESS"; payload: { isActive: boolean; steps?: RestoreStep[]; currentStep?: number; overallProgress?: number; restoringBackupName?: string } }
-    | { type: "UPDATE_RESTORE_STEP"; payload: { stepIndex: number; status: RestoreStep['status']; message?: string; duration?: string } };
+    | { type: "UPDATE_RESTORE_STEP"; payload: { stepIndex: number; status: RestoreStep['status']; message?: string; duration?: string } }
+    | { type: "ADD_LOG"; payload: string }
+    | { type: "CLEAR_LOGS" };
 
 function reducer(state: GlobalState, action: Action): GlobalState {
     switch (action.type) {
@@ -247,6 +252,16 @@ function reducer(state: GlobalState, action: Action): GlobalState {
                     steps: updatedSteps
                 }
             };
+        case "ADD_LOG":
+            return {
+                ...state,
+                logs: [...state.logs, action.payload]
+            };
+        case "CLEAR_LOGS":
+            return {
+                ...state,
+                logs: []
+            };
         default:
             return state;
     }
@@ -265,7 +280,22 @@ interface GlobalProviderProps {
 
 export const GlobalProvider = React.memo<GlobalProviderProps>(({ children }) => {
     const [state, dispatch] = useReducer(reducer, initialState);
-    
+
+    // Load spaceId from localStorage on mount
+    React.useEffect(() => {
+        const savedSpaceId = localStorage.getItem('selectedSpaceId');
+        if (savedSpaceId && !state.spaceId) {
+            dispatch({ type: "SET_DATA", payload: { spaceId: savedSpaceId } });
+        }
+    }, []);
+
+    // Save spaceId to localStorage when it changes
+    React.useEffect(() => {
+        if (state.spaceId) {
+            localStorage.setItem('selectedSpaceId', state.spaceId);
+        }
+    }, [state.spaceId]);
+
     const contextValue = useMemo(
         () => ({ state, dispatch }),
         [state, dispatch]

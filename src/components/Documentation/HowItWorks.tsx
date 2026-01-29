@@ -18,7 +18,7 @@ const HowItWorks: React.FC = () => {
           Getting Started
         </Typography>
         <Typography paragraph>
-          This application provides a user-friendly interface for managing Contentful content. 
+          This application provides a user-friendly interface for managing Contentful content.
           All operations are performed through the web UI, eliminating the need for command-line tools.
         </Typography>
       </Paper>
@@ -32,7 +32,7 @@ const HowItWorks: React.FC = () => {
           <Step active>
             <StepLabel>Authenticate</StepLabel>
             <StepContent>
-              <Typography>Click "Login to Contentful" and authenticate using your Contentful account.</Typography>
+              <Typography>Click &quot;Login to Contentful&quot; and authenticate using your Contentful account.</Typography>
             </StepContent>
           </Step>
           <Step active>
@@ -44,15 +44,15 @@ const HowItWorks: React.FC = () => {
           <Step active>
             <StepLabel>Select Environment</StepLabel>
             <StepContent>
-              <Typography>Choose the source environment (e.g., "master", "dev") from the "Source Environment" dropdown.</Typography>
+              <Typography>Choose the source environment (e.g., &quot;master&quot;, &quot;dev&quot;) from the &quot;Source Environment&quot; dropdown.</Typography>
             </StepContent>
           </Step>
           <Step active>
             <StepLabel>Create Backup</StepLabel>
             <StepContent>
               <Typography>
-                Click "Backup Source" button. The backup will be created and saved in the <code>backups/{'{space_id}'}/</code> directory.
-                You'll see a success message when the backup is complete.
+                Click &quot;Backup Source&quot; button. The backup will be created and saved in the <code>backups/{'{space_id}'}/</code> directory.
+                You&apos;ll see a success message when the backup is complete.
               </Typography>
             </StepContent>
           </Step>
@@ -68,13 +68,13 @@ const HowItWorks: React.FC = () => {
           To delete a backup:
         </Typography>
         <Box component="ol" sx={{ pl: 2 }}>
-          <li>Scroll to the "Backups" section</li>
+          <li>Scroll to the &quot;Backups&quot; section</li>
           <li>Find the backup you want to delete in the list</li>
-          <li>Click the "Delete" button next to the backup</li>
+          <li>Click the &quot;Delete&quot; button next to the backup</li>
           <li>Confirm the deletion when prompted</li>
         </Box>
         <Alert severity="warning" sx={{ mt: 2 }}>
-          Deleted backups cannot be recovered. Make sure you don't need the backup before deleting it.
+          Deleted backups cannot be recovered. Make sure you don&apos;t need the backup before deleting it.
         </Alert>
       </Paper>
 
@@ -93,20 +93,20 @@ const HowItWorks: React.FC = () => {
           <Step active>
             <StepLabel>Choose Backup</StepLabel>
             <StepContent>
-              <Typography>Select a backup from the list in the "Backups" section.</Typography>
+              <Typography>Select a backup from the list in the &quot;Backups&quot; section.</Typography>
             </StepContent>
           </Step>
           <Step active>
             <StepLabel>Restore</StepLabel>
             <StepContent>
               <Typography>
-                Click "Restore" button. The application will restore all content from the backup file to the selected environment.
+                Click &quot;Restore&quot; button. The application will restore all content from the backup file to the selected environment.
               </Typography>
             </StepContent>
           </Step>
         </Stepper>
         <Alert severity="info" sx={{ mt: 2 }}>
-          The restore process will overwrite existing content in the target environment. A backup of the target environment 
+          The restore process will overwrite existing content in the target environment. A backup of the target environment
           is automatically created before restoration.
         </Alert>
       </Paper>
@@ -140,7 +140,7 @@ const HowItWorks: React.FC = () => {
             <StepLabel>Migrate</StepLabel>
             <StepContent>
               <Typography>
-                Click "Migrate Content" button. All content types, entries, and assets will be copied from source to target.
+                Click &quot;Migrate Content&quot; button. All content types, entries, and assets will be copied from source to target.
               </Typography>
             </StepContent>
           </Step>
@@ -159,14 +159,14 @@ const HowItWorks: React.FC = () => {
           <Step active>
             <StepLabel>Enable Custom Migrate Mode</StepLabel>
             <StepContent>
-              <Typography>Toggle "Custom Migrate" switch to enable selective migration.</Typography>
+              <Typography>Toggle &quot;Custom Migrate&quot; switch to enable selective migration.</Typography>
             </StepContent>
           </Step>
           <Step active>
             <StepLabel>Analyze Differences</StepLabel>
             <StepContent>
               <Typography>
-                Click "Analyze" button to compare source and target environments. The analysis will show:
+                Click &quot;Analyze&quot; button to compare source and target environments. The analysis will show:
               </Typography>
               <Box component="ul" sx={{ pl: 2, mt: 1 }}>
                 <li>New content types in source</li>
@@ -195,7 +195,7 @@ const HowItWorks: React.FC = () => {
             <StepLabel>Migrate Selected</StepLabel>
             <StepContent>
               <Typography>
-                Click "Migrate Selected" to migrate only the selected content types and entries.
+                Click &quot;Migrate Selected&quot; to migrate only the selected content types and entries.
               </Typography>
             </StepContent>
           </Step>
@@ -210,13 +210,13 @@ const HowItWorks: React.FC = () => {
           You can restore from a backup file that you have locally:
         </Typography>
         <Box component="ol" sx={{ pl: 2 }}>
-          <li>Toggle "Custom Restore" switch</li>
-          <li>Click "Choose File" and select your backup JSON file</li>
+          <li>Toggle &quot;Custom Restore&quot; switch</li>
+          <li>Click &quot;Choose File&quot; and select your backup JSON file</li>
           <li>Select the target environment</li>
-          <li>Click "Restore" button</li>
+          <li>Click &quot;Restore&quot; button</li>
         </Box>
         <Alert severity="warning" sx={{ mt: 2 }}>
-          This operation will replace the entire target environment with content from the backup file. 
+          This operation will replace the entire target environment with content from the backup file.
           A backup of the target environment is created automatically before restoration.
         </Alert>
       </Paper>

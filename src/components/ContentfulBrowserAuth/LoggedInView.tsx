@@ -1,49 +1,23 @@
 import React from 'react';
-import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout';
+import { Box, Typography } from '@mui/material';
 
 interface LoggedInViewProps {
     onLogout: () => void;
-    onFullReset: () => void;
     isLoading: boolean;
 }
 
-const LoggedInView = React.memo<LoggedInViewProps>(({ onLogout, onFullReset, isLoading }) => {
+// Logout button is now in AppHeader, this component just shows auth status
+const LoggedInView = React.memo<LoggedInViewProps>(({ onLogout, isLoading }) => {
     return (
-        <Box 
-            sx={{ 
+        <Box
+            sx={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 mb: 2
             }}
         >
-            <Box sx={{ display: 'flex', gap: 2, width: '100%', maxWidth: '500px', mb: 2 }}>
-                <Button 
-                    variant="outlined" 
-                    color="secondary" 
-                    onClick={onLogout}
-                    disabled={isLoading}
-                    fullWidth
-                    size="medium"
-                    startIcon={isLoading ? <CircularProgress size={20} /> : <LogoutIcon />}
-                >
-                    Logout
-                </Button>
-                
-                <Button 
-                    variant="outlined" 
-                    color="error" 
-                    onClick={onFullReset}
-                    disabled={isLoading}
-                    fullWidth
-                    size="medium"
-                >
-                    Force Reset
-                </Button>
-            </Box>
-            
-            <Typography variant="body2" color="text.secondary" sx={{ mb: '50px' }}>
+            <Typography variant="body2" color="text.secondary">
                 Auth Status: <strong>Logged In</strong>
             </Typography>
         </Box>
@@ -53,4 +27,3 @@ const LoggedInView = React.memo<LoggedInViewProps>(({ onLogout, onFullReset, isL
 LoggedInView.displayName = 'LoggedInView';
 
 export default LoggedInView;
-
