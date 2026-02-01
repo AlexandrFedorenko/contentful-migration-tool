@@ -4,6 +4,7 @@ import AutoModeIcon from '@mui/icons-material/AutoMode';
 import BackupIcon from '@mui/icons-material/Backup';
 import RestoreIcon from '@mui/icons-material/Restore';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import FolderIcon from '@mui/icons-material/Folder';
 
 const OperationModes: React.FC = () => {
     return (
@@ -78,7 +79,7 @@ const OperationModes: React.FC = () => {
                             <li>Detects required content types for selected entries</li>
                             <li>Finds all dependent content types (recursively)</li>
                             <li>Creates missing content types in the target environment</li>
-                            <li>Migrates only the selected locales' data</li>
+                            <li>Migrates only the selected locales&apos; data</li>
                         </Box>
                     </li>
                 </Box>
@@ -145,8 +146,8 @@ const OperationModes: React.FC = () => {
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12}>
-                    <Paper elevation={2} sx={{ p: 3, mt: 0 }}>
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 3, mt: 0, height: '100%' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                             <CompareArrowsIcon color="action" sx={{ fontSize: 28 }} />
                             <Typography variant="h6">
@@ -159,6 +160,31 @@ const OperationModes: React.FC = () => {
                         <Typography paragraph>
                             This process uses the Contentful CLI export/import under the hood to ensure a complete transfer of all data structures.
                         </Typography>
+                    </Paper>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 3, mt: 0, height: '100%' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                            <FolderIcon color="info" sx={{ fontSize: 28 }} />
+                            <Typography variant="h6">
+                                Views Migration
+                            </Typography>
+                        </Box>
+                        <Typography paragraph>
+                            Migrates organizational folders and saved views between environments.
+                        </Typography>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Key Features:
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 2 }}>
+                            <li>Migrates folder structure for content organization</li>
+                            <li>Preserves view filters and column settings</li>
+                            <li>Safe migration (avoids duplicates)</li>
+                        </Box>
+                        <Alert severity="info" sx={{ mt: 2 }}>
+                            <strong>Note:</strong> Views rely on Content Types. Make sure Content Types match between environments before migrating views.
+                        </Alert>
                     </Paper>
                 </Grid>
             </Grid>

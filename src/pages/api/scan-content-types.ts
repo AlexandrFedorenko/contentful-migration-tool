@@ -46,9 +46,6 @@ export default async function handler(
         const sourceIterator = ContentfulManagement.getEntriesIterator(spaceId, sourceEnvironment);
         const targetEntriesMap = new Map<string, any>();
 
-        // Optimization: We could just fetch headers for target entries.
-        // For now, let's fetch target entries into a Map for quick lookup.
-        // In a real huge dataset, we might need to stream both and sort, but Map is fine for 10k items if we only store headers.
         const targetIterator = ContentfulManagement.getEntriesIterator(spaceId, targetEnvironment);
 
         for await (const batch of targetIterator) {
@@ -78,11 +75,6 @@ export default async function handler(
                         sourceUpdatedAt: sourceEntry.sys.updatedAt
                     });
                 } else {
-                    // Compare versions or updatedAt.
-                    // Note: Version numbers might differ if edits happened independently.
-                    // Better to compare updatedAt or publishedVersion if available.
-                    // For strict equality, we might need deep comparison, but for "Scan" we use heuristics.
-
                     const isModified = sourceEntry.sys.version !== targetEntry.sys.version ||
                         sourceEntry.sys.updatedAt !== targetEntry.sys.updatedAt;
 

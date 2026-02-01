@@ -32,9 +32,14 @@ const AppHeader = React.memo(function AppHeader() {
                         Documentation
                     </Link>
                     {isLoggedIn && (
-                        <Link href="/smart-migration" className={styles.docLink}>
-                            Smart Migration
-                        </Link>
+                        <>
+                            <Link href="/smart-migration" className={styles.docLink}>
+                                Smart Migration
+                            </Link>
+                            <Link href="/views-migration" className={styles.docLink}>
+                                Views Migration
+                            </Link>
+                        </>
                     )}
                     <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
                         <IconButton onClick={toggleTheme} sx={{ color: 'white' }}>

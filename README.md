@@ -29,10 +29,7 @@ A professional desktop application for creating backups, migrating content, and 
 2. **Install dependencies:**
    ```bash
    npm install
-   # OR
-   npm run setup
    ```
-   *The `setup` script will install dependencies and ensure the Contentful CLI is available.*
 
 3. **Configure Environment (Optional):**
    Create a `.env` file in the root directory if you wish to pre-configure tokens (though you can log in via the UI):
@@ -42,7 +39,9 @@ A professional desktop application for creating backups, migrating content, and 
 
 ## Development
 
-To start the application in development mode (Next.js server + Electron window):
+### Desktop App (Electron + Next.js)
+
+To start the full desktop application in development mode:
 
 ```bash
 npm run dev
@@ -51,7 +50,20 @@ npm run dev
 This command will:
 1. Start the Next.js local server on port 3000.
 2. Launch the Electron application window pointing to the local server.
-3. Enable Hot Module Replacement (HMR) for rapid development.
+3. Enable Hot Module Replacement (HMR).
+
+### Web Version Only (Next.js)
+
+If you only want to work on the UI/logic without the Electron wrapper:
+
+```bash
+npm run next:dev
+```
+*Access the app at http://localhost:3000*
+
+This command will:
+1. Start the Next.js local server on port 3000.
+2. Enable Hot Module Replacement (HMR) for rapid development.
 
 ## Building for Production
 

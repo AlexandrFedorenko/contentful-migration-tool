@@ -8,9 +8,10 @@ interface EnvironmentSelectorProps {
   onChange: (value: string) => void;
   label: string;
   disabled?: boolean;
+  disabledOption?: string;
 }
 
-const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({ environments, value, onChange, label, disabled }) => {
+const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({ environments, value, onChange, label, disabled, disabledOption }) => {
   const handleChange = useCallback((event: SelectChangeEvent) => {
     onChange(event.target.value);
   }, [onChange]);
@@ -34,7 +35,13 @@ const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({ environments
             <em>Select a Contentful environment</em>
           </MenuItem>
           {environments.map((env) => (
-            <MenuItem key={env.id} value={env.id}>{env.name}</MenuItem>
+            <MenuItem
+              key={env.id}
+              value={env.id}
+              disabled={env.id === disabledOption}
+            >
+              {env.name}
+            </MenuItem>
           ))}
         </Select>
       </FormControl>

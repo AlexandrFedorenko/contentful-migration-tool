@@ -45,7 +45,7 @@ async function startNextServer() {
             });
 
             nextServer.stdout.on('data', (data) => {
-                log(`Next.js stdout: ${data}`);
+                // log(`Next.js stdout: ${data}`); // Reduced logging
                 if (data.toString().includes('ready')) {
                     log('Next.js is ready');
                     resolve();

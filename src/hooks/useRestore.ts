@@ -94,7 +94,7 @@ export function useRestore(): UseRestoreReturn {
                 });
             }
         }
-    }, [dispatch, resetProgress, showError]);
+    }, [dispatch, resetProgress]);
 
     return { handleRestore };
 }

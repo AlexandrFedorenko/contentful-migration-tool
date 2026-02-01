@@ -10,8 +10,8 @@ interface RestoreRequest {
     spaceId: string;
     fileName: string;
     targetEnvironment: string;
-    fileContent?: any; // Optional: Direct file content for temp files
-    clearEnvironment?: boolean; // Optional: Clear target environment before restore
+    fileContent?: any;
+    clearEnvironment?: boolean;
     options?: {
         locales?: string[];
         contentTypes?: string[];
@@ -61,9 +61,6 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
         const usedAssetIds = new Set<string>();
         const usedEntryIds = new Set<string>(filtered.entries.map((e: any) => e.sys.id));
         const entriesMap = new Map(content.entries.map((e: any) => [e.sys.id, e]));
-
-        // Queue for processing entries (start with the ones selected by content type)
-        // We iterate through this queue, appending new dependencies as we find them
         const entriesQueue = [...filtered.entries];
 
         const processEntry = (entry: any) => {

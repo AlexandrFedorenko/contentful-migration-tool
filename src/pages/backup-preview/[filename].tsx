@@ -32,7 +32,6 @@ import {
     DialogContent,
     DialogContentText,
     DialogActions,
-    Alert
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
@@ -569,7 +568,6 @@ export default function BackupPreview() {
 
     const handleCloseSuccess = () => {
         setRestoreSuccess(false);
-        // Optional: reload page or redirect
     };
 
     if (loading) {

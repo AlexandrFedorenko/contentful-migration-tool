@@ -1,48 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Grid, Button, CircularProgress, Accordion, AccordionSummary, AccordionDetails, FormControlLabel, Checkbox, Divider } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Container, Typography, Box, Paper, Grid, Button, CircularProgress, Divider } from '@mui/material';
 import EnvironmentSelector from '@/components/EnvironmentSelector/EnvironmentSelector';
 import BackupList from '@/components/BackupList/BackupList';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useEnvironments } from '@/hooks/useEnvironments';
 import { useBackups } from '@/hooks/useBackups';
 import { useBackup } from '@/hooks/useBackup';
-import { useMigration } from '@/hooks/useMigration';
 import { useRestore } from '@/hooks/useRestore';
-import { useCustomMigrate } from '@/hooks/useCustomMigrate';
 import ContentfulBrowserAuth from '@/components/ContentfulBrowserAuth/ContentfulBrowserAuth';
 import { useAuth } from '@/context/AuthContext';
 import JsonLogDisplay from '@/components/JsonLogDisplay/JsonLogDisplay';
 import AuthDialog from '@/components/AuthDialog/AuthDialog';
 import SpaceSelectorSection from '@/components/SpaceSelectorSection/SpaceSelectorSection';
 import CustomRestoreSection from '@/components/CustomRestoreSection/CustomRestoreSection';
-import { ContentType } from '@/components/CustomMigrateSection/types';
 import RestoreResultModal from '@/components/RestoreResultModal/RestoreResultModal';
-
-
-
 import MigrationLogs from '@/components/MigrationLogs/MigrationLogs';
-import MigrationPreviewDialog from '@/components/MigrationPreviewDialog/MigrationPreviewDialog';
 
 export default function Home() {
   const { state, dispatch } = useGlobalContext();
   const { loadEnvironments } = useEnvironments();
   const { loadBackups } = useBackups();
   const { handleBackup } = useBackup();
-  const { handleMigration } = useMigration();
   const { handleRestore } = useRestore();
-  const { analyzeContentTypes, previewCustomMigrate, executeCustomMigrate } = useCustomMigrate();
-  const { isLoggedIn, isLoading } = useAuth();
-
+  const { isLoggedIn } = useAuth();
   const [showAuthDialog, setShowAuthDialog] = useState<boolean>(false);
   const [customRestoreMode, setCustomRestoreMode] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loadingCustomRestore, setLoadingCustomRestore] = useState(false);
   const [selectedBackupForRestore, setSelectedBackupForRestore] = useState<string | null>(null);
-
-
-  const [previewData, setPreviewData] = useState<any>(null);
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
 
   useEffect(() => {
     if (state.spaceId) {
@@ -220,6 +205,7 @@ export default function Home() {
                     onChange={(env) => dispatch({ type: "SET_DATA", payload: { selectedDonor: env } })}
                     label="Source Environment"
                     disabled={!!state.restoreMode || customRestoreMode}
+                    disabledOption={state.selectedTarget || undefined}
                   />
 
                   <Button
@@ -231,7 +217,6 @@ export default function Home() {
                       !state.selectedDonor ||
                       state.loading.loadingBackup ||
                       state.loading.loadingMigration ||
-                      state.restoreMode ||
                       state.restoreMode ||
                       customRestoreMode ||
                       loadingCustomRestore
@@ -251,6 +236,7 @@ export default function Home() {
                     onChange={(env) => dispatch({ type: "SET_DATA", payload: { selectedTarget: env } })}
                     label="Target Environment"
                     disabled={!state.restoreMode && !customRestoreMode}
+                    disabledOption={state.selectedDonor || undefined}
                   />
 
                   <Box sx={{ pt: 2 }}>

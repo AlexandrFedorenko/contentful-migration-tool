@@ -101,8 +101,6 @@ export default async function handler(
             deps.forEach(depId => allRequiredContentTypes.add(depId));
         });
 
-        console.log('[SmartMigrate] Required content types (including dependencies):', Array.from(allRequiredContentTypes));
-
 
         let createdCount = 0;
         let updatedCount = 0;
@@ -116,10 +114,8 @@ export default async function handler(
         for (const ctId of allRequiredContentTypes) {
             try {
                 await environment.getContentType(ctId);
-                console.log(`[SmartMigrate] ✓ Content type ${ctId} exists in target`);
             } catch (error) {
                 // Content type doesn't exist, create it
-                console.log(`[SmartMigrate] Content type ${ctId} not found in target, creating...`);
                 const sourceContentType = sourceData.contentTypes?.find((ct: any) => ct.sys.id === ctId);
 
                 if (sourceContentType) {
@@ -133,7 +129,6 @@ export default async function handler(
 
                         // Publish the content type
                         await newCt.publish();
-                        console.log(`[SmartMigrate] ✓ Content type ${ctId} created and published`);
                     } catch (createError) {
                         console.error(`[SmartMigrate] Failed to create content type ${ctId}:`, createError);
                         throw new Error(`Failed to create required content type: ${ctId}`);
@@ -151,17 +146,13 @@ export default async function handler(
                 const entryId = sourceEntry.sys.id;
                 const contentTypeId = sourceEntry.sys.contentType.sys.id;
 
-                console.log(`[SmartMigrate] Processing entry ${entryId} (${contentTypeId})...`);
-
-                let targetEntry;
+                let targetEntry: any;
                 let isNew = false;
                 try {
                     targetEntry = await environment.getEntry(entryId);
-                    console.log(`[SmartMigrate] Entry ${entryId} exists in target, will update`);
                 } catch (error) {
                     // Entry doesn't exist, we'll create it
                     isNew = true;
-                    console.log(`[SmartMigrate] Entry ${entryId} does not exist in target, will create`);
                 }
 
                 if (isNew) {
@@ -169,16 +160,13 @@ export default async function handler(
                     let fields = sourceEntry.fields;
                     if (selectedLocales && selectedLocales.length > 0) {
                         fields = filterFieldsByLocales(sourceEntry.fields, selectedLocales);
-                        console.log(`[SmartMigrate] Filtered fields to locales:`, selectedLocales);
                     }
 
-                    console.log(`[SmartMigrate] Creating entry ${entryId} with fields:`, JSON.stringify(fields, null, 2));
                     const newEntry = await environment.createEntryWithId(contentTypeId, entryId, {
                         fields
                     });
                     createdCount++;
                     targetEntry = newEntry;
-                    console.log(`[SmartMigrate] ✓ Entry ${entryId} created successfully`);
                 } else {
                     // Update existing entry
                     // Filter fields by selected locales
@@ -192,7 +180,6 @@ export default async function handler(
                         const updatedEntry = await targetEntry.update();
                         updatedCount++;
                         targetEntry = updatedEntry;
-                        console.log(`[SmartMigrate] ✓ Entry ${entryId} updated successfully`);
                     }
                 }
 
@@ -201,46 +188,27 @@ export default async function handler(
                     continue;
                 }
 
-                // Determine status in source and replicate it in target
                 const sourceVersion = sourceEntry.sys.version;
                 const sourcePublishedVersion = sourceEntry.sys.publishedVersion;
 
-                // Status logic:
-                // - Draft: publishedVersion is undefined
-                // - Published: version === publishedVersion + 1
-                // - Changed: version > publishedVersion + 1
-
                 if (!sourcePublishedVersion) {
-                    // Source is Draft - leave target as Draft (do nothing)
-
+                    // Draft: do nothing
                 } else if (sourceVersion === sourcePublishedVersion + 1) {
-                    // Source is Published - publish target
                     try {
                         await targetEntry.publish();
                         publishedCount++;
-
                     } catch (pubError) {
                         console.error(`[SmartMigrate] Failed to publish entry ${entryId}:`, pubError);
                     }
                 } else if (sourceVersion > sourcePublishedVersion + 1) {
-                    // Source is Changed (published + has unpublished changes)
-                    // We need to create this state in target
                     try {
-
                         const latestEntry = await environment.getEntry(entryId);
-
-
-                        const publishedEntry = await latestEntry.publish();
+                        await latestEntry.publish();
                         publishedCount++;
 
-
-                        // Then update it again to create "Changed" state
-                        // (entry already has the new fields from earlier update)
-                        // We just need to trigger another update to increment version
                         const changedEntry = await environment.getEntry(entryId);
-                        changedEntry.fields = sourceEntry.fields; // Ensure latest fields
+                        changedEntry.fields = sourceEntry.fields;
                         await changedEntry.update();
-
                     } catch (pubError) {
                         console.error(`[SmartMigrate] Failed to set Changed status for entry ${entryId}:`, pubError);
                     }

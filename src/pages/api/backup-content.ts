@@ -17,10 +17,6 @@ export default async function handler(
     }
 
     try {
-        // Construct path to backup file
-        // Assuming backups are stored in a 'backups' directory relative to the project root or similar
-        // Based on existing code (BackupService), we might need to find where it stores them.
-        // Usually it's ./backups/{spaceId}/{filename}
 
         const backupsDir = path.join(process.cwd(), 'backups', spaceId);
         const filePath = path.join(backupsDir, filename);

@@ -238,9 +238,6 @@ export default function SmartMigrationPage() {
                 setStatusMessage('Migration successful!');
                 setSuccessData({ deltaBackup: data.deltaBackup || 'Migration Complete' });
                 setSuccessDialogOpen(true);
-
-                // Refresh scan to reflect changes
-                // handleScan(); // Optional: might be better to let user decide
             } else {
                 throw new Error(data.error || 'Migration failed');
             }
@@ -302,7 +299,11 @@ export default function SmartMigrationPage() {
                                             disabled={!selectedSpace || envsLoading}
                                         >
                                             {environments?.map((env: any) => (
-                                                <MenuItem key={env.id} value={env.id}>
+                                                <MenuItem
+                                                    key={env.id}
+                                                    value={env.id}
+                                                    disabled={env.id === targetEnv}
+                                                >
                                                     {env.name}
                                                 </MenuItem>
                                             ))}
@@ -320,7 +321,11 @@ export default function SmartMigrationPage() {
                                             disabled={!selectedSpace || envsLoading}
                                         >
                                             {environments?.map((env) => (
-                                                <MenuItem key={env.id} value={env.id}>
+                                                <MenuItem
+                                                    key={env.id}
+                                                    value={env.id}
+                                                    disabled={env.id === sourceEnv}
+                                                >
                                                     {env.name}
                                                 </MenuItem>
                                             ))}

@@ -124,7 +124,7 @@ const CustomRestoreSection = React.memo(({
       </Box>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
-        ℹ️ Use "Preview & Select Content" to choose specific locales and content types before restoring
+        ℹ️ Use &quot;Preview & Select Content&quot; to choose specific locales and content types before restoring
       </Typography>
     </Paper>
   );

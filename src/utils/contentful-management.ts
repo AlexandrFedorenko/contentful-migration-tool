@@ -61,7 +61,7 @@ interface Entry {
 export class ContentfulManagement {
   private static client: ClientAPI | null = null;
 
-  private static getClient(): ClientAPI {
+  public static getClient(): ClientAPI {
     if (!this.client) {
       const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
       if (!token) {
@@ -338,7 +338,6 @@ export class ContentfulManagement {
       }
       onLog?.(`[Management API] Total entries fetched: ${allEntries.length}`);
 
-      // Get all assets
       onLog?.('[Management API] Fetching assets...');
       const allAssets: any[] = [];
       skip = 0;
