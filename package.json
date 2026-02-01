@@ -18,6 +18,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@emotion/react": "^11.11.0",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.11.16",
+    "@mui/material": "^5.13.0",
     "contentful-cli": "^2.6.31",
     "contentful-management": "^10.46.0",
     "cross-spawn": "^7.0.3",
