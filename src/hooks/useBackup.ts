@@ -3,7 +3,7 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { useLoading } from "./useLoading";
 import { handleError } from "@/utils/errorHandler";
 import { useRouter } from 'next/router';
-import { useError } from "@/contexts/ErrorContext";
+import { useError } from "@/context/ErrorContext";
 
 interface BackupsResponse {
     backups: Array<{

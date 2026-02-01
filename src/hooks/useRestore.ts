@@ -3,7 +3,7 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { api } from "@/utils/api";
 import { RestoreResponse } from "@/types/api";
 import { parseError } from "@/utils/errorParser";
-import { useError } from "@/contexts/ErrorContext";
+import { useError } from "@/context/ErrorContext";
 
 interface UseRestoreReturn {
     handleRestore: (backupFileName: string) => Promise<void>;
@@ -56,8 +56,12 @@ export function useRestore(): UseRestoreReturn {
                 resetProgress(dispatch);
                 dispatch({ type: "CLEAR_ERROR_INSTRUCTION" });
                 dispatch({
-                    type: "SET_STATUS",
-                    payload: `Backup ${backupFileName} restored to ${selectedTarget} successfully`
+                    type: "SET_RESTORE_RESULT",
+                    payload: {
+                        success: true,
+                        backupName: backupFileName,
+                        targetEnvironment: selectedTarget
+                    }
                 });
             } else {
                 throw new Error(response.error || 'Failed to restore backup');
@@ -78,11 +82,16 @@ export function useRestore(): UseRestoreReturn {
                     }
                 });
             } else {
+                // Show error in modal instead of snackbar
                 dispatch({
-                    type: "SET_STATUS",
-                    payload: `Restore failed: ${errorMessage}`
+                    type: "SET_RESTORE_RESULT",
+                    payload: {
+                        success: false,
+                        backupName: backupFileName,
+                        targetEnvironment: stateRef.current.selectedTarget,
+                        errorMessage
+                    }
                 });
-                showError(errorMessage);
             }
         }
     }, [dispatch, resetProgress, showError]);

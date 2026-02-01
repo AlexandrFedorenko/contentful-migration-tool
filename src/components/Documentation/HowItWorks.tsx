@@ -150,44 +150,49 @@ const HowItWorks: React.FC = () => {
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <AnalyticsIcon />
-          Custom Migration (Selective)
+          Smart Migration (Selective)
         </Typography>
         <Typography paragraph>
-          Custom migration allows you to selectively migrate specific content types and entries:
+          Smart migration allows you to selectively migrate specific content types and entries:
         </Typography>
         <Stepper orientation="vertical">
           <Step active>
-            <StepLabel>Enable Custom Migrate Mode</StepLabel>
+            <StepLabel>Select Environments</StepLabel>
             <StepContent>
-              <Typography>Toggle &quot;Custom Migrate&quot; switch to enable selective migration.</Typography>
+              <Typography>Choose source and target environments from the dropdowns.</Typography>
             </StepContent>
           </Step>
           <Step active>
-            <StepLabel>Analyze Differences</StepLabel>
+            <StepLabel>Scan Differences</StepLabel>
             <StepContent>
               <Typography>
-                Click &quot;Analyze&quot; button to compare source and target environments. The analysis will show:
+                Click &quot;SCAN DIFFERENCES&quot; button to compare environments. The scan will show:
               </Typography>
               <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>New content types in source</li>
-                <li>Modified content types</li>
-                <li>New entries</li>
-                <li>Modified entries</li>
+                <li><strong>NEW:</strong> Entries that exist in source but not in target</li>
+                <li><strong>MODIFIED:</strong> Entries that exist in both but have different content</li>
+                <li><strong>DELETED:</strong> Entries that exist in target but not in source</li>
               </Box>
             </StepContent>
           </Step>
           <Step active>
-            <StepLabel>Select Content to Migrate</StepLabel>
+            <StepLabel>Filter Results</StepLabel>
+            <StepContent>
+              <Typography>Use filters to narrow down what you want to migrate:</Typography>
+              <Box component="ul" sx={{ pl: 2, mt: 1 }}>
+                <li><strong>Search:</strong> Filter by entry title or ID</li>
+                <li><strong>Status Filter:</strong> Show only NEW, MODIFIED, or DELETED entries</li>
+                <li><strong>Content Type Filter:</strong> Select specific content types</li>
+                <li><strong>Locales to Migrate:</strong> Choose which locales to migrate (e.g., only en-US, de-DE)</li>
+              </Box>
+            </StepContent>
+          </Step>
+          <Step active>
+            <StepLabel>Select Entries</StepLabel>
             <StepContent>
               <Typography>
-                Expand content types in the accordion view and select:
-              </Typography>
-              <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>Entire content types (check the content type checkbox)</li>
-                <li>Individual entries (check specific entry checkboxes)</li>
-              </Box>
-              <Typography sx={{ mt: 1 }}>
-                Selecting an entry automatically selects its parent content type.
+                Check the boxes next to entries you want to migrate. Click on an entry to preview the differences
+                between source and target versions.
               </Typography>
             </StepContent>
           </Step>
@@ -195,11 +200,28 @@ const HowItWorks: React.FC = () => {
             <StepLabel>Migrate Selected</StepLabel>
             <StepContent>
               <Typography>
-                Click &quot;Migrate Selected&quot; to migrate only the selected content types and entries.
+                Click &quot;MIGRATE SELECTED&quot; button. The tool will automatically:
               </Typography>
+              <Box component="ul" sx={{ pl: 2, mt: 1 }}>
+                <li>Detect all required content types for selected entries</li>
+                <li>Find dependent content types recursively</li>
+                <li>Create missing content types in target environment</li>
+                <li>Migrate only the selected locales&apos; data</li>
+                <li>Create or update entries in the target environment</li>
+              </Box>
             </StepContent>
           </Step>
         </Stepper>
+        <Alert severity="success" sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            <strong>Smart Features:</strong>
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, mb: 0 }}>
+            <li>Automatically creates missing content types and dependencies</li>
+            <li>Migrates only selected locales to save time and reduce data transfer</li>
+            <li>Shows field-level differences for easy comparison</li>
+          </Box>
+        </Alert>
       </Paper>
 
       <Paper elevation={2} sx={{ p: 3 }}>

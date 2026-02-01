@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import { DialogActions as MuiDialogActions, Button } from '@mui/material';
 import { Close as CloseIcon, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import styles from './JsonLogDisplay.module.css';
@@ -9,8 +9,8 @@ interface DialogActionsProps {
   backupFileName?: string;
 }
 
-const DialogActions = React.memo<DialogActionsProps>(({ onClose, onMinimize, backupFileName }) => {
-  const handleOpenLogFile = React.useCallback(() => {
+const DialogActions = memo<DialogActionsProps>(({ onClose, onMinimize, backupFileName }) => {
+  const handleOpenLogFile = useCallback(() => {
     if (backupFileName) {
       const url = `/log-viewer?fileName=${encodeURIComponent(backupFileName)}`;
       window.open(url, '_blank');
@@ -20,8 +20,8 @@ const DialogActions = React.memo<DialogActionsProps>(({ onClose, onMinimize, bac
   return (
     <MuiDialogActions className={styles.dialogActions}>
       {backupFileName && (
-        <Button 
-          onClick={handleOpenLogFile} 
+        <Button
+          onClick={handleOpenLogFile}
           variant="outlined"
           startIcon={<OpenInNewIcon />}
           className={styles.openLogButton}
@@ -29,15 +29,15 @@ const DialogActions = React.memo<DialogActionsProps>(({ onClose, onMinimize, bac
           Open Error Log
         </Button>
       )}
-      <Button 
-        onClick={onMinimize} 
+      <Button
+        onClick={onMinimize}
         variant="outlined"
         startIcon={<CloseIcon />}
       >
         Minimize
       </Button>
-      <Button 
-        onClick={onClose} 
+      <Button
+        onClick={onClose}
         variant="contained"
       >
         Got it

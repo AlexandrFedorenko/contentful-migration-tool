@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useMemo, useEffect, memo } from 'react';
 import { Environment, LoadingState } from '@/types/common';
 import { Backup } from '@/types/backup';
 import { RestoreStep } from '@/components/RestoreProgressModal/types';
@@ -42,6 +42,13 @@ export interface GlobalState {
         restoringBackupName?: string;
     };
     logs: string[];
+    restoreResult: {
+        open: boolean;
+        success: boolean;
+        backupName?: string;
+        targetEnvironment?: string;
+        errorMessage?: string;
+    };
 }
 
 const initialState: GlobalState = {
@@ -86,7 +93,11 @@ const initialState: GlobalState = {
         currentStep: 0,
         overallProgress: 0
     },
-    logs: []
+    logs: [],
+    restoreResult: {
+        open: false,
+        success: false
+    }
 };
 
 type Action =
@@ -111,7 +122,9 @@ type Action =
     | { type: "SET_RESTORE_PROGRESS"; payload: { isActive: boolean; steps?: RestoreStep[]; currentStep?: number; overallProgress?: number; restoringBackupName?: string } }
     | { type: "UPDATE_RESTORE_STEP"; payload: { stepIndex: number; status: RestoreStep['status']; message?: string; duration?: string } }
     | { type: "ADD_LOG"; payload: string }
-    | { type: "CLEAR_LOGS" };
+    | { type: "CLEAR_LOGS" }
+    | { type: "SET_RESTORE_RESULT"; payload: { success: boolean; backupName?: string; targetEnvironment?: string; errorMessage?: string } }
+    | { type: "CLOSE_RESTORE_RESULT" };
 
 function reducer(state: GlobalState, action: Action): GlobalState {
     switch (action.type) {
@@ -262,6 +275,25 @@ function reducer(state: GlobalState, action: Action): GlobalState {
                 ...state,
                 logs: []
             };
+        case "SET_RESTORE_RESULT":
+            return {
+                ...state,
+                restoreResult: {
+                    open: true,
+                    success: action.payload.success,
+                    backupName: action.payload.backupName,
+                    targetEnvironment: action.payload.targetEnvironment,
+                    errorMessage: action.payload.errorMessage
+                }
+            };
+        case "CLOSE_RESTORE_RESULT":
+            return {
+                ...state,
+                restoreResult: {
+                    open: false,
+                    success: false
+                }
+            };
         default:
             return state;
     }
@@ -278,19 +310,19 @@ interface GlobalProviderProps {
     children: ReactNode;
 }
 
-export const GlobalProvider = React.memo<GlobalProviderProps>(({ children }) => {
+export const GlobalProvider = memo<GlobalProviderProps>(({ children }) => {
     const [state, dispatch] = useReducer(reducer, initialState);
 
     // Load spaceId from localStorage on mount
-    React.useEffect(() => {
+    useEffect(() => {
         const savedSpaceId = localStorage.getItem('selectedSpaceId');
         if (savedSpaceId && !state.spaceId) {
             dispatch({ type: "SET_DATA", payload: { spaceId: savedSpaceId } });
         }
-    }, []);
+    }, [state.spaceId, dispatch]);
 
     // Save spaceId to localStorage when it changes
-    React.useEffect(() => {
+    useEffect(() => {
         if (state.spaceId) {
             localStorage.setItem('selectedSpaceId', state.spaceId);
         }

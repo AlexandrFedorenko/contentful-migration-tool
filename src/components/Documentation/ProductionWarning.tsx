@@ -9,7 +9,7 @@ const ProductionWarning: React.FC = () => {
     <Box>
       <Alert severity="warning" sx={{ mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          ⚠️ Beta Testing Notice
+          Beta Testing Notice
         </Typography>
         <Typography>
           This application is currently in <strong>beta testing</strong>. While we strive for reliability,
@@ -17,8 +17,8 @@ const ProductionWarning: React.FC = () => {
         </Typography>
       </Alert>
 
-      <Paper elevation={2} sx={{ p: 3, mb: 3, bgcolor: '#fff3cd' }}>
-        <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#856404' }}>
+      <Paper elevation={2} sx={{ p: 3, mb: 3, bgcolor: 'warning.main', color: 'warning.contrastText' }}>
+        <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <WarningIcon />
           Critical: Backup Before Production Operations
         </Typography>

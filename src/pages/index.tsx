@@ -17,6 +17,7 @@ import AuthDialog from '@/components/AuthDialog/AuthDialog';
 import SpaceSelectorSection from '@/components/SpaceSelectorSection/SpaceSelectorSection';
 import CustomRestoreSection from '@/components/CustomRestoreSection/CustomRestoreSection';
 import { ContentType } from '@/components/CustomMigrateSection/types';
+import RestoreResultModal from '@/components/RestoreResultModal/RestoreResultModal';
 
 
 
@@ -326,7 +327,14 @@ export default function Home() {
 
       <MigrationLogs />
 
-
+      <RestoreResultModal
+        open={state.restoreResult?.open ?? false}
+        onClose={() => dispatch({ type: "CLOSE_RESTORE_RESULT" })}
+        success={state.restoreResult?.success ?? false}
+        backupName={state.restoreResult?.backupName}
+        targetEnvironment={state.restoreResult?.targetEnvironment}
+        errorMessage={state.restoreResult?.errorMessage}
+      />
 
     </Container>
   );

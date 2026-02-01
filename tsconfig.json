@@ -37,7 +37,10 @@
   ],
   "exclude": [
     "node_modules",
+    "electron",
     "dist",
-    ".next"
+    ".next",
+    "out",
+    "build"
   ]
 }

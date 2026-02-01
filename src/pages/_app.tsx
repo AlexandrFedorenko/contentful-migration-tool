@@ -9,7 +9,7 @@ import { NetworkStatus } from "@/components/NetworkStatus/NetworkStatus";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import BetaBadge from "@/components/BetaBadge/BetaBadge";
-import { ErrorProvider } from "@/contexts/ErrorContext";
+import { ErrorProvider } from "@/context/ErrorContext";
 import { GlobalErrorModal } from "@/components/GlobalErrorModal";
 
 export default function MyApp({ Component, pageProps }: AppProps) {

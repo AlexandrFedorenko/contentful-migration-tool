@@ -2,7 +2,7 @@ import { useCallback, useRef, useEffect } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { useBackups } from "./useBackups";
 import { useLoading } from "./useLoading";
-import { useError } from "@/contexts/ErrorContext";
+import { useError } from "@/context/ErrorContext";
 
 interface EnvironmentValidation {
     spaceId: string;

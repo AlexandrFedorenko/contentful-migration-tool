@@ -1,38 +1,82 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { fork } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+
+function log(message) {
+    const logPath = path.join(app.getPath('userData'), 'main.log');
+    const timestamp = new Date().toISOString();
+    const logMessage = `${timestamp}: ${message}\n`;
+    try {
+        fs.appendFileSync(logPath, logMessage);
+    } catch (error) {
+        console.error('Failed to write to log:', error);
+    }
+}
 const isDev = process.env.NODE_ENV === 'development';
 
-console.log('Electron starting...');
-console.log('isDev:', isDev);
+// Main process started
+
 
 let mainWindow;
 let nextServer;
 
 async function startNextServer() {
-    console.log('Starting Next.js server...');
-    return new Promise((resolve) => {
-        const nextPath = path.join(__dirname, '../node_modules/.bin/next');
-        nextServer = spawn(nextPath, ['start', '-p', '3000'], {
-            cwd: path.join(__dirname, '..'),
-            shell: true
-        });
 
-        nextServer.stdout.on('data', (data) => {
-            console.log(`Next.js: ${data}`);
-            if (data.toString().includes('ready')) {
+    return new Promise((resolve, reject) => {
+        let nextDistPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
+
+        // In production, the node_modules are unpacked to app.asar.unpacked
+        // but __dirname is still inside app.asar
+        if (app.isPackaged) {
+            nextDistPath = nextDistPath.replace('app.asar', 'app.asar.unpacked');
+        }
+
+        log(`Starting Next.js server...`);
+        log(`Binary path: ${nextDistPath}`);
+        log(`CWD: ${path.join(__dirname, '..')}`);
+
+        try {
+            nextServer = fork(nextDistPath, ['start', '-p', '3000'], {
+                cwd: path.join(__dirname, '..'),
+                silent: true,
+                env: { ...process.env, NODE_ENV: 'production' }
+            });
+
+            nextServer.stdout.on('data', (data) => {
+                log(`Next.js stdout: ${data}`);
+                if (data.toString().includes('ready')) {
+                    log('Next.js is ready');
+                    resolve();
+                }
+            });
+
+            nextServer.stderr.on('data', (data) => {
+                log(`Next.js stderr: ${data}`);
+                console.error(`Next.js Error: ${data}`);
+            });
+
+            nextServer.on('error', (err) => {
+                log(`Next.js failed to start: ${err.message}`);
+                console.error('Next.js process failed:', err);
+                reject(err);
+            });
+
+            // Resolve after a timeout if ready message is missed
+            setTimeout(() => {
+                log('Timeout waiting for Next.js ready signal, proceeding anyway...');
                 resolve();
-            }
-        });
-
-        nextServer.stderr.on('data', (data) => {
-            console.error(`Next.js Error: ${data}`);
-        });
+            }, 10000); // Increased timeout
+        } catch (err) {
+            log(`Exception starting Next.js: ${err.message}`);
+            reject(err);
+        }
     });
 }
 
 function createWindow() {
-    console.log('Creating window...');
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -50,35 +94,35 @@ function createWindow() {
         show: true, // Show immediately
     });
 
-    console.log('Window created, loading URL...');
+
 
     // Always connect to Next.js server on localhost:3000
     mainWindow.loadURL('http://localhost:3000').then(() => {
-        console.log('URL loaded successfully');
+
     }).catch((err) => {
         console.error('Failed to load URL:', err);
     });
 
     if (isDev) {
-        console.log('Opening DevTools...');
+
         mainWindow.webContents.openDevTools();
     }
 
     mainWindow.on('closed', () => {
-        console.log('Window closed');
+
         mainWindow = null;
     });
 }
 
 // App lifecycle
 app.whenReady().then(async () => {
-    console.log('App ready!');
+
     if (!isDev) {
-        console.log('Starting Next.js server for production...');
+
         // In production, start Next.js server
         await startNextServer();
     } else {
-        console.log('Development mode - expecting Next.js to be running already');
+        // Development mode - expecting Next.js to be running already
     }
 
     createWindow();
@@ -91,7 +135,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    console.log('All windows closed');
+
     if (nextServer) {
         nextServer.kill();
     }
@@ -101,7 +145,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-    console.log('App quitting...');
+
     if (nextServer) {
         nextServer.kill();
     }

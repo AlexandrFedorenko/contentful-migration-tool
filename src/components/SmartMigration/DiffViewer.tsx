@@ -95,7 +95,7 @@ export default function DiffViewer({ oldValue, newValue, sourceAssets, targetAss
     ]));
 
     return (
-        <Paper variant="outlined" sx={{ height: 600, display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+        <Paper variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
                     <Tab icon={<ArticleIcon />} label="Field Differences" />

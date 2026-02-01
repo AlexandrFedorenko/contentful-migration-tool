@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+
+// ... (existing code, note: we'll just target the import line and the useMemo usage separately if needed, but I'll do it in chunks)
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -33,7 +35,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem('themeMode', newMode);
     };
 
-    const theme = React.useMemo(
+    const theme = useMemo(
         () =>
             createTheme({
                 palette: {

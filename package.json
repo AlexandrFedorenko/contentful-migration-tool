@@ -52,6 +52,12 @@
   "build": {
     "appId": "com.contentful.migrationtool",
     "productName": "Contentful Migration Tool",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/contentful-cli",
+      "node_modules/next",
+      ".next"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -59,8 +65,12 @@
       "electron/**/*",
       ".next/**/*",
       "public/**/*",
+      "package.json",
       "node_modules/**/*",
-      "package.json"
+      "!node_modules/electron",
+      "!node_modules/@types",
+      "!node_modules/eslint",
+      "!node_modules/typescript"
     ],
     "win": {
       "target": [

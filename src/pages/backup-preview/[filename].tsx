@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
+import Image from 'next/image';
 import {
     Container,
     Typography,
@@ -125,11 +126,12 @@ const RichTextRenderer = ({ node, assets, entries }: { node: any, assets: any[],
             const fileData = Object.values(asset.fields?.file || {})[0] as any;
             if (fileData?.url && fileData.contentType?.startsWith('image/')) {
                 return (
-                    <Box sx={{ my: 2 }}>
-                        <img
+                    <Box sx={{ my: 2, position: 'relative', width: '100%', height: 300 }}>
+                        <Image
                             src={fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url}
                             alt={fileData.fileName}
-                            style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 4 }}
+                            fill
+                            style={{ objectFit: 'contain', borderRadius: 4 }}
                         />
                     </Box>
                 );

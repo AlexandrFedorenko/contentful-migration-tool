@@ -26,29 +26,29 @@ export const config = {
     },
 };
 
-// Helper function to filter backup content based on options
+
 function filterBackupContent(content: any, options: { locales?: string[]; contentTypes?: string[] }): any {
     const filtered = { ...content };
 
-    // Filter locales
+
     if (options.locales && options.locales.length > 0) {
         filtered.locales = filtered.locales?.filter((locale: any) =>
             options.locales!.includes(locale.code)
         );
     }
 
-    // Filter content types
+
     if (options.contentTypes && options.contentTypes.length > 0) {
         filtered.contentTypes = filtered.contentTypes?.filter((ct: any) =>
             options.contentTypes!.includes(ct.sys.id)
         );
 
-        // Filter entries to only include those of selected content types
+
         filtered.entries = filtered.entries?.filter((entry: any) =>
             options.contentTypes!.includes(entry.sys.contentType.sys.id)
         );
 
-        // Filter editor interfaces
+
         if (filtered.editorInterfaces) {
             filtered.editorInterfaces = filtered.editorInterfaces.filter((ei: any) =>
                 options.contentTypes!.includes(ei.sys.contentType.sys.id)
@@ -56,7 +56,7 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
         }
     }
 
-    // Filter Assets AND Referenced Entries (Recursive Dependency Resolution)
+
     if (options.contentTypes && options.contentTypes.length > 0 && filtered.entries && content.entries) {
         const usedAssetIds = new Set<string>();
         const usedEntryIds = new Set<string>(filtered.entries.map((e: any) => e.sys.id));
@@ -75,12 +75,12 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
                     return;
                 }
 
-                // Asset Link
+
                 if (obj.sys && obj.sys.type === 'Link' && obj.sys.linkType === 'Asset') {
                     usedAssetIds.add(obj.sys.id);
                 }
 
-                // Entry Link
+
                 if (obj.sys && obj.sys.type === 'Link' && obj.sys.linkType === 'Entry') {
                     const linkedEntryId = obj.sys.id;
                     if (!usedEntryIds.has(linkedEntryId)) {
@@ -93,7 +93,7 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
                     }
                 }
 
-                // Rich Text Links (Embedded Asset/Entry)
+
                 if (obj.nodeType === 'embedded-asset-block' && obj.data?.target?.sys?.id) {
                     usedAssetIds.add(obj.data.target.sys.id);
                 }
@@ -112,30 +112,29 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
                 Object.values(obj).forEach(traverse);
             };
 
-            // Traverse fields
+
             if (entry.fields) {
                 traverse(entry.fields);
             }
         };
 
-        // Process queue until empty (BFS for dependencies)
+
         let processedIndex = 0;
         while (processedIndex < entriesQueue.length) {
             processEntry(entriesQueue[processedIndex]);
             processedIndex++;
         }
 
-        console.log(`[RESTORE] Dependency resolution complete. Total entries: ${usedEntryIds.size}, Total assets: ${usedAssetIds.size}`);
 
-        // Filter Assets based on collected IDs
+
+
         if (filtered.assets) {
             const originalCount = filtered.assets.length;
             filtered.assets = filtered.assets.filter((asset: any) => usedAssetIds.has(asset.sys.id));
-            console.log(`[RESTORE] Filtered assets from ${originalCount} to ${filtered.assets.length}`);
+
         }
 
-        // Update Content Types and Editor Interfaces to include those used by ALL collected entries
-        // (Original selection + Recursive dependencies)
+
         const requiredContentTypeIds = new Set<string>();
         filtered.entries.forEach((entry: any) => {
             if (entry.sys?.contentType?.sys?.id) {
@@ -143,7 +142,7 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
             }
         });
 
-        console.log(`[RESTORE] Required Content Types: ${requiredContentTypeIds.size}`);
+
 
         if (content.contentTypes) {
             filtered.contentTypes = content.contentTypes.filter((ct: any) =>
@@ -158,8 +157,7 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
         }
     }
 
-    // Strict Locale Stripping
-    // If specific locales are selected, we must remove all other locale keys from fields
+
     if (options.locales && options.locales.length > 0) {
         const allowedLocales = new Set(options.locales);
 
@@ -185,14 +183,14 @@ function filterBackupContent(content: any, options: { locales?: string[]; conten
     return filtered;
 }
 
-// Helper function to transform locale in backup content
-function transformBackupLocales(content: any, fromLocale: string, toLocale: string) {
-    console.log(`[RESTORE] Transforming content from locale '${fromLocale}' to '${toLocale}'`);
 
-    // Deep clone to avoid mutating original if needed
+function transformBackupLocales(content: any, fromLocale: string, toLocale: string) {
+
+
+
     const newContent = JSON.parse(JSON.stringify(content));
 
-    // 1. Update Locales definition
+
     if (newContent.locales) {
         newContent.locales = newContent.locales.map((loc: any) => {
             if (loc.code === fromLocale) {
@@ -202,7 +200,7 @@ function transformBackupLocales(content: any, fromLocale: string, toLocale: stri
         });
     }
 
-    // 2. Update Entries
+
     if (newContent.entries) {
         newContent.entries.forEach((entry: any) => {
             if (entry.fields) {
@@ -217,7 +215,7 @@ function transformBackupLocales(content: any, fromLocale: string, toLocale: stri
         });
     }
 
-    // 3. Update Assets
+
     if (newContent.assets) {
         newContent.assets.forEach((asset: any) => {
             if (asset.fields) {
@@ -232,7 +230,7 @@ function transformBackupLocales(content: any, fromLocale: string, toLocale: stri
         });
     }
 
-    // 4. Update Content Types (for default values in fields)
+
     if (newContent.contentTypes) {
         newContent.contentTypes.forEach((ct: any) => {
             if (ct.fields) {
@@ -276,7 +274,7 @@ export default async function handler(
     let tempFilePath: string | null = null;
 
     try {
-        // 1. Handle "Clear Environment" if requested
+
         if (clearEnvironment) {
             const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
             if (!token) {
@@ -287,7 +285,7 @@ export default async function handler(
             const space = await client.getSpace(spaceId);
             const environment = await space.getEnvironment(targetEnvironment);
 
-            // Delete all entries
+
             const entries = await environment.getEntries({ limit: 1000 });
             for (const entry of entries.items) {
                 if (entry.isPublished()) {
@@ -296,7 +294,7 @@ export default async function handler(
                 await entry.delete();
             }
 
-            // Delete all assets
+
             const assets = await environment.getAssets({ limit: 1000 });
             for (const asset of assets.items) {
                 if (asset.isPublished()) {
@@ -305,7 +303,7 @@ export default async function handler(
                 await asset.delete();
             }
 
-            // Delete all content types
+
             const contentTypes = await environment.getContentTypes({ limit: 1000 });
             for (const ct of contentTypes.items) {
                 if (ct.isPublished()) {
@@ -314,21 +312,20 @@ export default async function handler(
                 await ct.delete();
             }
 
-            // Note: We are NOT deleting locales as that might break things more than intended, 
-            // and usually you want to keep locales.
+
         }
 
         let fileToRestore = fileName;
         let backupContent: any = null;
 
-        // 2. Determine source data
+
         if (fileContent) {
-            // Content provided directly (from preview page or temp file)
+
             backupContent = typeof fileContent === 'string'
                 ? JSON.parse(fileContent)
                 : fileContent;
         } else if (options && (options.locales || options.contentTypes)) {
-            // Need to read from file for filtering
+
             const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
 
             if (!fs.existsSync(backupFilePath)) {
@@ -338,36 +335,23 @@ export default async function handler(
             backupContent = JSON.parse(fs.readFileSync(backupFilePath, 'utf-8'));
         }
 
-        // 3. Apply filtering if options are provided
+
         if (backupContent && options && (options.locales || options.contentTypes)) {
-            console.log('[RESTORE] Applying filtering with options:', {
-                locales: options.locales,
-                contentTypes: options.contentTypes,
-                originalLocalesCount: backupContent.locales?.length,
-                originalContentTypesCount: backupContent.contentTypes?.length,
-                originalEntriesCount: backupContent.entries?.length
-            });
             backupContent = filterBackupContent(backupContent, options);
-            console.log('[RESTORE] After filtering:', {
-                filteredLocalesCount: backupContent.locales?.length,
-                filteredContentTypesCount: backupContent.contentTypes?.length,
-                filteredEntriesCount: backupContent.entries?.length
-            });
         }
 
-        // 3.5 Check for Locale Mismatch and Transform if needed
+
         if (backupContent) {
             try {
                 const targetLocales = await ContentfulManagement.getLocales(spaceId, targetEnvironment);
                 const targetDefaultLocale = targetLocales.find((l: any) => l.default)?.code;
 
-                // Find default locale in backup content
-                // If backupContent.locales exists, use it. Otherwise assume 'en' or try to infer.
-                // Usually backups include a 'locales' array.
+
+
                 const sourceDefaultLocale = backupContent.locales?.find((l: any) => l.default)?.code;
 
                 if (targetDefaultLocale && sourceDefaultLocale && targetDefaultLocale !== sourceDefaultLocale) {
-                    console.log(`[RESTORE] Detected locale mismatch. Source: ${sourceDefaultLocale}, Target: ${targetDefaultLocale}`);
+
                     backupContent = transformBackupLocales(backupContent, sourceDefaultLocale, targetDefaultLocale);
                 }
             } catch (error) {
@@ -376,7 +360,7 @@ export default async function handler(
             }
         }
 
-        // 4. Write to temp file if we have modified content
+
         if (backupContent) {
             const tempFileName = `temp-filtered-${Date.now()}-${fileName}`;
             const backupDir = path.join(process.cwd(), 'backups', spaceId);
@@ -386,24 +370,24 @@ export default async function handler(
             }
 
             tempFilePath = path.join(backupDir, tempFileName);
-            console.log('[RESTORE] Writing filtered content to temp file:', tempFilePath);
+
             fs.writeFileSync(tempFilePath, JSON.stringify(backupContent, null, 2));
             fileToRestore = tempFileName;
         } else {
-            console.log('[RESTORE] No backupContent to filter, using original file:', fileToRestore);
+
         }
 
-        // 5. Perform Restore
-        console.log('[RESTORE] Starting restore with file:', fileToRestore);
+
+
         const restoreResult = await ContentfulCLI.restoreBackup(
             spaceId,
             fileToRestore,
             targetEnvironment,
-            (msg) => console.log('[CONTENTFUL-CLI]', msg)
+
         );
 
 
-        // Cleanup temporary file if created
+
         if (tempFilePath && fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
         }
@@ -412,7 +396,7 @@ export default async function handler(
             success: true
         });
     } catch (error) {
-        // Cleanup on error too
+
         if (tempFilePath && fs.existsSync(tempFilePath)) {
             try { fs.unlinkSync(tempFilePath); } catch { }
         }

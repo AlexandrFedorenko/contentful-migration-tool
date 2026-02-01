@@ -9,7 +9,7 @@ import {
     Box,
     IconButton
 } from '@mui/material';
-import { useError } from '@/contexts/ErrorContext';
+import { useError } from '@/context/ErrorContext';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 

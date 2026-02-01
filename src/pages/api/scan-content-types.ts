@@ -42,11 +42,11 @@ export default async function handler(
             });
         }
 
-        // 1. Fetch Source Entries (Stream)
+
         const sourceIterator = ContentfulManagement.getEntriesIterator(spaceId, sourceEnvironment);
         const targetEntriesMap = new Map<string, any>();
 
-        // 2. Fetch Target Entries (Stream) - Optimization: We could just fetch headers
+        // Optimization: We could just fetch headers for target entries.
         // For now, let's fetch target entries into a Map for quick lookup.
         // In a real huge dataset, we might need to stream both and sort, but Map is fine for 10k items if we only store headers.
         const targetIterator = ContentfulManagement.getEntriesIterator(spaceId, targetEnvironment);
@@ -61,7 +61,7 @@ export default async function handler(
 
         const results: ScanResultItem[] = [];
 
-        // 3. Compare
+
         for await (const batch of sourceIterator) {
             for (const sourceEntry of batch) {
                 if (sourceEntry.sys.contentType.sys.id !== contentTypeId) continue;
@@ -78,7 +78,7 @@ export default async function handler(
                         sourceUpdatedAt: sourceEntry.sys.updatedAt
                     });
                 } else {
-                    // Compare versions or updatedAt
+                    // Compare versions or updatedAt.
                     // Note: Version numbers might differ if edits happened independently.
                     // Better to compare updatedAt or publishedVersion if available.
                     // For strict equality, we might need deep comparison, but for "Scan" we use heuristics.

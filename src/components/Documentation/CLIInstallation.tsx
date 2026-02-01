@@ -19,14 +19,15 @@ const CLIInstallation: React.FC = () => {
         <Typography paragraph>
           The easiest way to install Contentful CLI is using npm:
         </Typography>
-        <Box 
-          component="pre" 
-          sx={{ 
-            backgroundColor: '#f5f5f5', 
-            p: 2, 
+        <Box
+          component="pre"
+          sx={{
+            bgcolor: 'action.hover',
+            p: 2,
             borderRadius: 1,
             overflow: 'auto',
-            border: '1px solid #e0e0e0'
+            border: 1,
+            borderColor: 'divider'
           }}
         >
           npm install -g contentful-cli
@@ -52,7 +53,7 @@ const CLIInstallation: React.FC = () => {
             <li>npm (comes with Node.js)</li>
             <li>PowerShell or Command Prompt</li>
           </Typography>
-          
+
           <Typography variant="subtitle2" gutterBottom>
             Installation Steps:
           </Typography>
@@ -65,17 +66,17 @@ const CLIInstallation: React.FC = () => {
           <Typography variant="subtitle2" gutterBottom>
             Common Commands:
           </Typography>
-          <Box 
-            component="pre" 
-            sx={{ 
-              backgroundColor: '#f5f5f5', 
-              p: 2, 
+          <Box
+            component="pre"
+            sx={{
+              bgcolor: 'action.hover',
+              p: 2,
               borderRadius: 1,
               overflow: 'auto',
               fontSize: '0.875rem'
             }}
           >
-{`# Login to Contentful
+            {`# Login to Contentful
 contentful login
 
 # List spaces
@@ -106,7 +107,7 @@ contentful space import --space-id YOUR_SPACE_ID --environment-id target`}
             <li>npm (comes with Node.js)</li>
             <li>Terminal application</li>
           </Typography>
-          
+
           <Typography variant="subtitle2" gutterBottom>
             Installation Steps:
           </Typography>
@@ -120,17 +121,17 @@ contentful space import --space-id YOUR_SPACE_ID --environment-id target`}
           <Typography variant="subtitle2" gutterBottom>
             Common Commands:
           </Typography>
-          <Box 
-            component="pre" 
-            sx={{ 
-              backgroundColor: '#f5f5f5', 
-              p: 2, 
+          <Box
+            component="pre"
+            sx={{
+              bgcolor: 'action.hover',
+              p: 2,
               borderRadius: 1,
               overflow: 'auto',
               fontSize: '0.875rem'
             }}
           >
-{`# Login to Contentful
+            {`# Login to Contentful
 contentful login
 
 # List spaces
@@ -167,7 +168,7 @@ contentful space import \\
             <li>npm (comes with Node.js)</li>
             <li>Terminal/Shell access</li>
           </Typography>
-          
+
           <Typography variant="subtitle2" gutterBottom>
             Installation Steps:
           </Typography>
@@ -181,17 +182,17 @@ contentful space import \\
           <Typography variant="subtitle2" gutterBottom>
             Common Commands:
           </Typography>
-          <Box 
-            component="pre" 
-            sx={{ 
-              backgroundColor: '#f5f5f5', 
-              p: 2, 
+          <Box
+            component="pre"
+            sx={{
+              bgcolor: 'action.hover',
+              p: 2,
               borderRadius: 1,
               overflow: 'auto',
               fontSize: '0.875rem'
             }}
           >
-{`# Login to Contentful
+            {`# Login to Contentful
 contentful login
 
 # List spaces
@@ -221,22 +222,22 @@ contentful space import \\
         <Typography paragraph>
           If you need to migrate an entire environment manually using CLI, follow these steps:
         </Typography>
-        
+
         <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
           Step 1: Export Source Environment
         </Typography>
-        <Box 
-          component="pre" 
-          sx={{ 
-            backgroundColor: '#f5f5f5', 
-            p: 2, 
+        <Box
+          component="pre"
+          sx={{
+            bgcolor: 'action.hover',
+            p: 2,
             borderRadius: 1,
             overflow: 'auto',
             fontSize: '0.875rem',
             mb: 2
           }}
         >
-{`contentful space export \\
+          {`contentful space export \\
   --space-id YOUR_SPACE_ID \\
   --environment-id source-env \\
   --content-file backup-source.json \\
@@ -247,25 +248,25 @@ contentful space import \\
         <Typography variant="subtitle1" gutterBottom>
           Step 2: Import to Target Environment
         </Typography>
-        <Box 
-          component="pre" 
-          sx={{ 
-            backgroundColor: '#f5f5f5', 
-            p: 2, 
+        <Box
+          component="pre"
+          sx={{
+            bgcolor: 'action.hover',
+            p: 2,
             borderRadius: 1,
             overflow: 'auto',
             fontSize: '0.875rem',
             mb: 2
           }}
         >
-{`contentful space import \\
+          {`contentful space import \\
   --space-id YOUR_SPACE_ID \\
   --environment-id target-env \\
   --content-file backup-source.json`}
         </Box>
 
         <Typography variant="body2" color="warning.main" sx={{ mt: 2, p: 2, bgcolor: '#fff3cd', borderRadius: 1 }}>
-          ⚠️ <strong>Warning:</strong> Importing will overwrite existing content in the target environment. 
+          ⚠️ <strong>Warning:</strong> Importing will overwrite existing content in the target environment.
           Always create a backup of the target environment before importing.
         </Typography>
       </Paper>

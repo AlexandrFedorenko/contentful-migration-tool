@@ -123,19 +123,9 @@ const CustomRestoreSection = React.memo(({
         )}
       </Box>
 
-      <Button
-        variant="contained"
-        color="warning"
-        fullWidth
-        disabled={!selectedFile || !state.selectedTarget || loadingCustomRestore}
-        onClick={onCustomRestore}
-      >
-        {loadingCustomRestore ? (
-          <CircularProgress size={20} color="inherit" />
-        ) : (
-          'Replace Environment & Import'
-        )}
-      </Button>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
+        ℹ️ Use "Preview & Select Content" to choose specific locales and content types before restoring
+      </Typography>
     </Paper>
   );
 });

@@ -110,13 +110,13 @@ export default async function handler(
         return res.status(400).json({ success: false, error: 'No content types selected for preview' });
       }
 
-      // 1. Backup Source
+
       const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName);
       if (!sourceBackupResult.success || !sourceBackupResult.backupFile) {
         throw new Error('Failed to create source environment backup');
       }
 
-      // 2. Filter & Create Selective Backup
+
       const sourceBackupPath = path.join(backupDir, sourceBackupResult.backupFile);
       const sourceData: BackupData = JSON.parse(fs.readFileSync(sourceBackupPath, 'utf8'));
       const selectiveBackup = createSelectiveBackup(sourceData, selectedContentTypes);
@@ -142,13 +142,13 @@ export default async function handler(
         return res.status(400).json({ success: false, error: 'Missing selectiveBackupFile for execution' });
       }
 
-      // 3. Backup Target (Rollback safety)
+
       const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
       if (!targetBackupResult.success || !targetBackupResult.backupFile) {
         throw new Error('Failed to create target environment backup');
       }
 
-      // 4. Restore Selective Backup
+
       await ContentfulCLI.restoreBackup(spaceId, selectiveBackupFile, targetEnvironment);
 
       return res.status(200).json({

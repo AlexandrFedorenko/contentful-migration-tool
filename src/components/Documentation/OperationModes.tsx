@@ -57,11 +57,41 @@ const OperationModes: React.FC = () => {
                     </li>
                     <li>
                         <Typography paragraph>
-                            <strong>Select & Migrate:</strong> You select exactly which items to migrate. Dependencies (like linked assets or entries)
-                            are automatically detected and suggested.
+                            <strong>Filter:</strong> Use filters to narrow down results:
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 2, mb: 2 }}>
+                            <li><strong>Status Filter:</strong> Show only NEW, MODIFIED, or DELETED entries</li>
+                            <li><strong>Content Type Filter:</strong> Filter by specific content types</li>
+                            <li><strong>Locale Filter:</strong> Select which locales to migrate (e.g., only en-US)</li>
+                        </Box>
+                    </li>
+                    <li>
+                        <Typography paragraph>
+                            <strong>Select & Migrate:</strong> You select exactly which items to migrate.
                         </Typography>
                     </li>
+                    <li>
+                        <Typography paragraph>
+                            <strong>Auto-Dependencies:</strong> The tool automatically:
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 2, mb: 2 }}>
+                            <li>Detects required content types for selected entries</li>
+                            <li>Finds all dependent content types (recursively)</li>
+                            <li>Creates missing content types in the target environment</li>
+                            <li>Migrates only the selected locales' data</li>
+                        </Box>
+                    </li>
                 </Box>
+
+                <Alert severity="success" sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                        <strong>New Features:</strong>
+                    </Typography>
+                    <Box component="ul" sx={{ pl: 2, mb: 0 }}>
+                        <li><strong>Locale Selection:</strong> Choose specific locales to migrate instead of all locales</li>
+                        <li><strong>Smart Content Types:</strong> Automatically creates missing content types and their dependencies</li>
+                    </Box>
+                </Alert>
             </Paper>
 
             <Grid container spacing={3}>

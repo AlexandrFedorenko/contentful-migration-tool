@@ -37,43 +37,43 @@ export default async function handler(
             fs.mkdirSync(backupDir, { recursive: true });
         }
 
-        // Create backup for Source environment using Management API (includes drafts)
-        console.log(`[SmartScan] Starting backup for Source: ${sourceEnv} (with drafts)`);
+
+
         const sourceResult = await ContentfulManagement.createFullBackup(
             spaceId,
             sourceEnv,
-            (msg) => console.log(`[Source] ${msg}`)
+
         );
 
         if (!sourceResult.success || !sourceResult.backupData) {
             throw new Error(`Failed to backup source environment: ${sourceEnv}`);
         }
 
-        // Save source backup to file
+
         const sourceBackupFile = `${spaceName}-${sourceEnv}-${timestamp}.json`;
         const sourceBackupPath = path.join(backupDir, sourceBackupFile);
         fs.writeFileSync(sourceBackupPath, JSON.stringify(sourceResult.backupData, null, 2));
-        console.log(`[SmartScan] Source backup saved: ${sourceBackupFile}`);
 
-        // Create backup for Target environment using Management API (includes drafts)
-        console.log(`[SmartScan] Starting backup for Target: ${targetEnv} (with drafts)`);
+
+
+
         const targetResult = await ContentfulManagement.createFullBackup(
             spaceId,
             targetEnv,
-            (msg) => console.log(`[Target] ${msg}`)
+
         );
 
         if (!targetResult.success || !targetResult.backupData) {
             throw new Error(`Failed to backup target environment: ${targetEnv}`);
         }
 
-        // Save target backup to file
+
         const targetBackupFile = `${spaceName}-${targetEnv}-${timestamp}.json`;
         const targetBackupPath = path.join(backupDir, targetBackupFile);
         fs.writeFileSync(targetBackupPath, JSON.stringify(targetResult.backupData, null, 2));
-        console.log(`[SmartScan] Target backup saved: ${targetBackupFile}`);
 
-        // Log file sizes
+
+
         const sourceStats = fs.statSync(sourceBackupPath);
         const targetStats = fs.statSync(targetBackupPath);
 

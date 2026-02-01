@@ -80,11 +80,7 @@ export default async function handler(
       await sleep(CREATE_DELAY);
 
       const fileName = path.basename(tempFilePath);
-      const importResult = await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
-
-      if (!importResult) {
-        throw new Error('Failed to import backup');
-      }
+      await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
 
       return res.status(200).json({
         success: true,

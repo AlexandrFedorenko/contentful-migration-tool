@@ -30,6 +30,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RestoreIcon from '@mui/icons-material/Restore';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import DownloadIcon from '@mui/icons-material/Download';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useBackupDelete } from '@/hooks/useBackupDelete';
 import { useBackupRename } from '@/hooks/useBackupRename';
@@ -116,6 +117,18 @@ export default function BackupList({ selectedBackupForRestore, onBackupSelect }:
     setItemsPerPage(Number(event.target.value));
     setPage(1);
   }, []);
+
+  const handleDownload = useCallback((backupName: string) => {
+    const downloadUrl = `/api/download-backup?spaceId=${state.spaceId}&fileName=${encodeURIComponent(backupName)}`;
+
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = backupName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [state.spaceId]);
 
   if (state.backups.length === 0) {
     return <Typography>No backups available</Typography>;
@@ -219,6 +232,21 @@ export default function BackupList({ selectedBackupForRestore, onBackupSelect }:
                       size="small"
                     >
                       <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Download" arrow>
+                    <IconButton
+                      edge="end"
+                      aria-label="download"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(backup.name);
+                      }}
+                      disabled={isRestoring}
+                      size="small"
+                      color="success"
+                    >
+                      <DownloadIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                   {/* Restore button removed in favor of radio selection */}

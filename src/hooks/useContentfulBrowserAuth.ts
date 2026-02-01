@@ -146,6 +146,7 @@ export const useContentfulBrowserAuth = () => {
 
             setIsLoggedIn(false);
             localStorage.removeItem('contentful_auth_status');
+            localStorage.removeItem('selectedSpaceId'); // Clear selected space on logout
             setToken('');
             setAuthUrl('');
         } catch (error) {

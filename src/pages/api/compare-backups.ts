@@ -25,6 +25,7 @@ interface CompareResponse {
     targetAssets?: any[];
     sourceEntries?: any[];
     targetEntries?: any[];
+    sourceLocales?: string[];
     error?: string;
 }
 
@@ -56,14 +57,14 @@ export default async function handler(
 
         const diffs: DiffItem[] = [];
 
-        // Helper to map entries by ID
+
         const mapEntries = (entries: any[]) => {
             const map = new Map<string, any>();
             entries.forEach(e => map.set(e.sys.id, e));
             return map;
         };
 
-        // Helper to determine entry status (Draft/Changed/Published)
+
         const getEntryStatus = (entry: any): 'Draft' | 'Changed' | 'Published' => {
             const version = entry.sys.version;
             const publishedVersion = entry.sys.publishedVersion;
@@ -80,9 +81,9 @@ export default async function handler(
         const sourceEntriesMap = mapEntries(sourceData.entries || []);
         const targetEntriesMap = mapEntries(targetData.entries || []);
 
-        console.log(`[CompareBackups] Source entries: ${sourceEntriesMap.size}, Target entries: ${targetEntriesMap.size}`);
 
-        // 1. Check for NEW and MODIFIED
+
+
         for (const [id, sourceEntry] of sourceEntriesMap) {
             const targetEntry = targetEntriesMap.get(id);
             const title = getEntryTitle(sourceEntry);
@@ -103,7 +104,7 @@ export default async function handler(
                 const changes: Record<string, { oldValue: any, newValue: any }> = {};
                 let hasChanges = false;
 
-                // Check fields in Source
+
                 for (const key of Object.keys(sourceEntry.fields)) {
                     const sourceVal = sourceEntry.fields[key];
                     const targetVal = targetEntry.fields[key];
@@ -114,7 +115,7 @@ export default async function handler(
                     }
                 }
 
-                // Check for fields present in Target but missing in Source (Deleted fields)
+
                 for (const key of Object.keys(targetEntry.fields)) {
                     if (!(key in sourceEntry.fields)) {
                         changes[key] = { oldValue: targetEntry.fields[key], newValue: undefined };
@@ -136,7 +137,7 @@ export default async function handler(
             }
         }
 
-        // 2. Check for DELETED (In Target but not Source)
+
         for (const [id, targetEntry] of targetEntriesMap) {
             if (!sourceEntriesMap.has(id)) {
                 const sysStatus = getEntryStatus(targetEntry);
@@ -151,13 +152,46 @@ export default async function handler(
             }
         }
 
+        // Extract locale codes from source backup
+        // Get locales from environment settings
+        const envLocales = (sourceData.locales || []).map((loc: any) => loc.code);
+
+        // Also extract locales actually used in entries/assets (in case there are more than configured)
+        const usedLocales = new Set<string>();
+
+        // Check entries
+        (sourceData.entries || []).forEach((entry: any) => {
+            if (entry.fields) {
+                Object.values(entry.fields).forEach((field: any) => {
+                    if (field && typeof field === 'object') {
+                        Object.keys(field).forEach(locale => usedLocales.add(locale));
+                    }
+                });
+            }
+        });
+
+        // Check assets
+        (sourceData.assets || []).forEach((asset: any) => {
+            if (asset.fields) {
+                Object.values(asset.fields).forEach((field: any) => {
+                    if (field && typeof field === 'object') {
+                        Object.keys(field).forEach(locale => usedLocales.add(locale));
+                    }
+                });
+            }
+        });
+
+        // Combine both sources (environment + actually used)
+        const allLocales = Array.from(new Set([...envLocales, ...usedLocales]));
+
         return res.status(200).json({
             success: true,
             diffs,
             sourceAssets: sourceData.assets || [],
             targetAssets: targetData.assets || [],
             sourceEntries: sourceData.entries || [],
-            targetEntries: targetData.entries || []
+            targetEntries: targetData.entries || [],
+            sourceLocales: allLocales
         });
 
     } catch (error) {
@@ -169,7 +203,7 @@ export default async function handler(
     }
 }
 
-// Helper to get title
+
 function getEntryTitle(entry: any): string {
     if (!entry || !entry.fields) return entry?.sys?.id || 'Unknown';
     const fields = entry.fields;
