@@ -25,9 +25,9 @@ export function useCustomMigrate() {
     const { state, dispatch } = useGlobalContext();
     const { setLoading } = useLoading();
     const { loadBackups } = useBackups();
-    
+
     const stateRef = useRef(state);
-    
+
     useEffect(() => {
         stateRef.current = state;
     }, [state]);
@@ -38,8 +38,8 @@ export function useCustomMigrate() {
         try {
             validateEnvironments({ spaceId, selectedDonor, selectedTarget });
 
-            dispatch({ 
-                type: "SET_STATUS", 
+            dispatch({
+                type: "SET_STATUS",
                 payload: `Analyzing content types between ${selectedDonor} and ${selectedTarget}...`
             });
 
@@ -62,17 +62,17 @@ export function useCustomMigrate() {
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Failed to analyze content types';
-            
-            dispatch({ 
-                type: "SET_STATUS", 
+
+            dispatch({
+                type: "SET_STATUS",
                 payload: `Analysis failed: ${errorMessage}`
             });
-            
+
             throw error;
         }
     }, [dispatch, setLoading]);
 
-    const customMigrate = useCallback(async (selectedContentTypes: string[]) => {
+    const previewCustomMigrate = useCallback(async (selectedContentTypes: string[]) => {
         const { spaceId, selectedDonor, selectedTarget } = stateRef.current;
 
         try {
@@ -82,9 +82,9 @@ export function useCustomMigrate() {
                 throw new Error('Please select at least one content type to migrate');
             }
 
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Starting custom migration of ${selectedContentTypes.length} content types...`
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Generating preview for ${selectedContentTypes.length} content types...`
             });
 
             setLoading("loadingCustomMigrate", true);
@@ -94,32 +94,80 @@ export function useCustomMigrate() {
                     spaceId,
                     sourceEnvironment: selectedDonor,
                     targetEnvironment: selectedTarget,
-                    selectedContentTypes
+                    selectedContentTypes,
+                    action: 'preview'
                 });
 
-                if (response.success) {
-                    dispatch({ 
-                        type: "SET_STATUS", 
-                        payload: `Custom migration completed successfully! Created backups: ${response.data?.sourceBackupFile}, ${response.data?.targetBackupFile}`
+                if (response.success && response.data?.previewData) {
+                    dispatch({
+                        type: "SET_STATUS",
+                        payload: `Preview generated successfully!`
                     });
-                    await loadBackups(spaceId);
+                    return response.data.previewData;
                 } else {
-                    throw new Error(response.error || 'Failed to perform custom migration');
+                    throw new Error(response.error || 'Failed to generate preview');
                 }
             } finally {
                 setLoading("loadingCustomMigrate", false);
             }
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to perform custom migration';
-            
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Custom migration failed: ${errorMessage}`
+            const errorMessage = error instanceof Error ? error.message : 'Failed to generate preview';
+
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Preview generation failed: ${errorMessage}`
             });
-            
+
+            throw error;
+        }
+    }, [dispatch, setLoading]);
+
+    const executeCustomMigrate = useCallback(async (selectiveBackupFile: string) => {
+        const { spaceId, selectedDonor, selectedTarget } = stateRef.current;
+
+        try {
+            validateEnvironments({ spaceId, selectedDonor, selectedTarget });
+
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Executing migration from preview...`
+            });
+
+            setLoading("loadingCustomMigrate", true);
+
+            try {
+                const response = await api.post<CustomMigrateResponse>('/api/custom-migrate', {
+                    spaceId,
+                    sourceEnvironment: selectedDonor,
+                    targetEnvironment: selectedTarget,
+                    selectedContentTypes: [], // Not needed for execute
+                    action: 'execute',
+                    selectiveBackupFile
+                });
+
+                if (response.success) {
+                    dispatch({
+                        type: "SET_STATUS",
+                        payload: `Custom migration completed successfully! Target backup: ${response.data?.targetBackupFile}`
+                    });
+                    await loadBackups(spaceId);
+                } else {
+                    throw new Error(response.error || 'Failed to execute migration');
+                }
+            } finally {
+                setLoading("loadingCustomMigrate", false);
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to execute migration';
+
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Migration execution failed: ${errorMessage}`
+            });
+
             throw error;
         }
     }, [dispatch, setLoading, loadBackups]);
 
-    return { analyzeContentTypes, customMigrate };
-} 
+    return { analyzeContentTypes, previewCustomMigrate, executeCustomMigrate };
+}

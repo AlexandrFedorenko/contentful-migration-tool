@@ -71,4 +71,11 @@ export interface CustomMigrateResponse {
   error?: string;
   sourceBackupFile?: string;
   targetBackupFile?: string;
-} 
+  previewData?: {
+    entriesCount: number;
+    assetsCount: number;
+    contentTypesCount: number;
+    localesCount: number;
+    selectiveBackupFile: string;
+  };
+}

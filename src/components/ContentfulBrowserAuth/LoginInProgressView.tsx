@@ -24,24 +24,23 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
     isLoading
 }) => {
     return (
-        <Box 
-            sx={{ 
+        <Box
+            sx={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '400px',
+                pt: '200px', // 200px from top
                 mb: 3
             }}
         >
             <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
                 Contentful Migration Tool
             </Typography>
-            
+
             <Typography variant="body1" sx={{ mb: 3, textAlign: 'center', color: 'text.secondary', maxWidth: '600px' }}>
                 Authorization page should be open in a new tab. After completing authorization, copy the token and paste it below.
             </Typography>
-            
+
             {authUrl && (
                 <Box sx={{ mb: 3, display: 'flex', gap: 1, alignItems: 'center' }}>
                     <Button
@@ -56,7 +55,7 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
                     </Button>
                 </Box>
             )}
-            
+
             <Box sx={{ width: '100%', maxWidth: '500px', mb: 2 }}>
                 <TextField
                     fullWidth
@@ -69,16 +68,16 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
                     helperText="Copy the token from the authorization page and paste it here"
                 />
             </Box>
-            
+
             {error && (
                 <Typography color="error" sx={{ mb: 2, textAlign: 'center', maxWidth: '500px' }}>
                     {error}
                 </Typography>
             )}
-            
+
             <Box sx={{ display: 'flex', gap: 2, width: '100%', maxWidth: '500px', mb: 3 }}>
-                <Button 
-                    variant="contained" 
+                <Button
+                    variant="contained"
                     color="primary"
                     onClick={onSaveToken}
                     disabled={isLoading || !token.trim()}
@@ -88,8 +87,8 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
                 >
                     {isLoading ? <CircularProgress size={20} /> : 'SAVE TOKEN'}
                 </Button>
-                <Button 
-                    variant="outlined" 
+                <Button
+                    variant="outlined"
                     onClick={onCancel}
                     disabled={isLoading}
                     fullWidth
@@ -99,7 +98,7 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
                     CANCEL
                 </Button>
             </Box>
-            
+
             <Typography variant="body2" color="text.secondary">
                 Auth Status: <strong>Authorization in progress...</strong>
             </Typography>
@@ -110,4 +109,3 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
 LoginInProgressView.displayName = 'LoginInProgressView';
 
 export default LoginInProgressView;
-

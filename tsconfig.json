@@ -32,11 +32,15 @@
   },
   "include": [
     "next-env.d.ts",
-    "src/**/*",
-    "**/*.ts",
-    "**/*.tsx"
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "electron",
+    "dist",
+    ".next",
+    "out",
+    "build"
   ]
 }

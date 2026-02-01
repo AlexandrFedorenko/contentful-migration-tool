@@ -10,6 +10,7 @@ interface CustomRestoreRequest {
   spaceId: string;
   targetEnvironment: string;
   fileContent: string;
+  fileName: string;
 }
 
 const BACKUP_DELAY = 2000;
@@ -29,19 +30,19 @@ export default async function handler(
   }
 
   try {
-    const { spaceId, targetEnvironment, fileContent }: CustomRestoreRequest = req.body;
+    const { spaceId, targetEnvironment, fileContent, fileName }: CustomRestoreRequest = req.body;
 
-    if (!spaceId || !targetEnvironment || !fileContent) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields: spaceId, targetEnvironment, or fileContent' 
+    if (!spaceId || !targetEnvironment || !fileContent || !fileName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: spaceId, targetEnvironment, fileContent, or fileName'
       });
     }
 
     if (targetEnvironment === 'master') {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Cannot replace master environment for safety reasons' 
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot replace master environment for safety reasons'
       });
     }
 
@@ -49,8 +50,10 @@ export default async function handler(
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
-    
-    const tempFilePath = path.join(backupDir, `custom-restore-${Date.now()}.json`);
+
+    // Sanitize filename and prepend timestamp
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const tempFilePath = path.join(backupDir, `${Date.now()}-${sanitizedFileName}`);
     fs.writeFileSync(tempFilePath, fileContent);
 
     const space = await ContentfulManagement.getSpace(spaceId);
@@ -58,7 +61,7 @@ export default async function handler(
 
     try {
       const currentBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
-      
+
       if (!currentBackupResult.success || !currentBackupResult.backupFile) {
         throw new Error('Failed to create backup of current environment');
       }
@@ -66,7 +69,7 @@ export default async function handler(
       await sleep(BACKUP_DELAY);
 
       const environmentExists = await checkEnvironmentExists(spaceId, targetEnvironment);
-      
+
       if (!environmentExists) {
         throw new Error(`Environment ${targetEnvironment} does not exist`);
       }
@@ -75,15 +78,11 @@ export default async function handler(
       await sleep(DELETE_DELAY);
       await createEnvironment(spaceId, targetEnvironment);
       await sleep(CREATE_DELAY);
-      
-      const fileName = path.basename(tempFilePath);
-      const importResult = await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
-      
-      if (!importResult) {
-        throw new Error('Failed to import backup');
-      }
 
-      return res.status(200).json({ 
+      const fileName = path.basename(tempFilePath);
+      await ContentfulCLI.restoreBackup(spaceId, fileName, targetEnvironment);
+
+      return res.status(200).json({
         success: true,
         backupFile: currentBackupResult.backupFile
       });
@@ -98,9 +97,9 @@ export default async function handler(
     }
 
   } catch (error) {
-    return res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     });
   }
 }
@@ -110,24 +109,24 @@ async function checkEnvironmentExists(spaceId: string, environmentId: string): P
     const checkProcess = spawn('contentful', [
       'space', 'environment', 'list',
       '--space-id', spaceId
-    ], { 
+    ], {
       stdio: 'pipe',
       shell: true
     });
 
     let output = '';
-    
+
     if (checkProcess.stdout) {
       checkProcess.stdout.on('data', (data: Buffer) => {
         output += data.toString();
       });
     }
-    
+
     if (checkProcess.stderr) {
       checkProcess.stderr.on('data', () => {
       });
     }
-    
+
     checkProcess.on('close', (code: number) => {
       if (code === 0) {
         const exists = output.includes(environmentId);
@@ -145,7 +144,7 @@ async function deleteEnvironment(spaceId: string, environmentId: string): Promis
       'space', 'environment', 'delete',
       '--space-id', spaceId,
       '--environment-id', environmentId
-    ], { 
+    ], {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: true
     });
@@ -153,20 +152,20 @@ async function deleteEnvironment(spaceId: string, environmentId: string): Promis
     if (deleteProcess.stdin) {
       deleteProcess.stdin.write('y\n');
     }
-    
+
     let output = '';
-    
+
     if (deleteProcess.stdout) {
       deleteProcess.stdout.on('data', (data: Buffer) => {
         output += data.toString();
       });
     }
-    
+
     if (deleteProcess.stderr) {
       deleteProcess.stderr.on('data', () => {
       });
     }
-    
+
     deleteProcess.on('close', (code: number) => {
       if (code === 0) {
         resolve();
@@ -184,24 +183,24 @@ async function createEnvironment(spaceId: string, environmentId: string): Promis
       '--space-id', spaceId,
       '--environment-id', environmentId,
       '--name', environmentId
-    ], { 
+    ], {
       stdio: 'pipe',
       shell: true
     });
 
     let output = '';
-    
+
     if (createProcess.stdout) {
       createProcess.stdout.on('data', (data: Buffer) => {
         output += data.toString();
       });
     }
-    
+
     if (createProcess.stderr) {
       createProcess.stderr.on('data', () => {
       });
     }
-    
+
     createProcess.on('close', (code: number) => {
       if (code === 0) {
         resolve();

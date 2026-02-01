@@ -3,6 +3,7 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { api } from "@/utils/api";
 import { RestoreResponse } from "@/types/api";
 import { parseError } from "@/utils/errorParser";
+import { useError } from "@/context/ErrorContext";
 
 interface UseRestoreReturn {
     handleRestore: (backupFileName: string) => Promise<void>;
@@ -10,6 +11,7 @@ interface UseRestoreReturn {
 
 export function useRestore(): UseRestoreReturn {
     const { state, dispatch } = useGlobalContext();
+    const { showError } = useError();
     const stateRef = useRef(state);
     stateRef.current = state;
 
@@ -53,9 +55,13 @@ export function useRestore(): UseRestoreReturn {
             if (response.success) {
                 resetProgress(dispatch);
                 dispatch({ type: "CLEAR_ERROR_INSTRUCTION" });
-                dispatch({ 
-                    type: "SET_STATUS", 
-                    payload: `Backup ${backupFileName} restored to ${selectedTarget} successfully` 
+                dispatch({
+                    type: "SET_RESTORE_RESULT",
+                    payload: {
+                        success: true,
+                        backupName: backupFileName,
+                        targetEnvironment: selectedTarget
+                    }
                 });
             } else {
                 throw new Error(response.error || 'Failed to restore backup');
@@ -63,22 +69,28 @@ export function useRestore(): UseRestoreReturn {
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Failed to restore backup';
             const instruction = parseError(errorMessage);
-            
+
             resetProgress(dispatch);
-            
+
             if (instruction) {
                 dispatch({
                     type: "SET_ERROR_INSTRUCTION",
-                    payload: { 
-                        instruction, 
-                        errorMessage, 
-                        backupFile: backupFileName 
+                    payload: {
+                        instruction,
+                        errorMessage,
+                        backupFile: backupFileName
                     }
                 });
             } else {
+                // Show error in modal instead of snackbar
                 dispatch({
-                    type: "SET_STATUS",
-                    payload: `Restore failed: ${errorMessage}`
+                    type: "SET_RESTORE_RESULT",
+                    payload: {
+                        success: false,
+                        backupName: backupFileName,
+                        targetEnvironment: stateRef.current.selectedTarget,
+                        errorMessage
+                    }
                 });
             }
         }

@@ -7,6 +7,7 @@ import {
     Tab,
     Paper,
 } from '@mui/material';
+import AutoModeIcon from '@mui/icons-material/AutoMode';
 import BackupIcon from '@mui/icons-material/Backup';
 import WarningIcon from '@mui/icons-material/Warning';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
@@ -16,6 +17,7 @@ import { useDocumentationTabs, TabIndex } from '@/hooks/useDocumentationTabs';
 import ContentfulOverview from './ContentfulOverview';
 import CLIInstallation from './CLIInstallation';
 import HowItWorks from './HowItWorks';
+import OperationModes from './OperationModes';
 import ErrorHandling from './ErrorHandling';
 import ProductionWarning from './ProductionWarning';
 
@@ -43,6 +45,7 @@ const Documentation: React.FC = () => {
                     <Tab icon={<LibraryBooksIcon />} iconPosition="start" label="Contentful Overview" />
                     <Tab icon={<TerminalIcon />} iconPosition="start" label="CLI Installation" />
                     <Tab icon={<BackupIcon />} iconPosition="start" label="How It Works" />
+                    <Tab icon={<AutoModeIcon />} iconPosition="start" label="Operation Modes" />
                     <Tab icon={<ErrorOutlineIcon />} iconPosition="start" label="Errors & Solutions" />
                     <Tab icon={<WarningIcon />} iconPosition="start" label="Production Safety" />
                 </Tabs>
@@ -52,6 +55,7 @@ const Documentation: React.FC = () => {
                 {tabIndex === TabIndex.CONTENTFUL && <ContentfulOverview />}
                 {tabIndex === TabIndex.CLI_INSTALLATION && <CLIInstallation />}
                 {tabIndex === TabIndex.HOW_IT_WORKS && <HowItWorks />}
+                {tabIndex === TabIndex.OPERATION_MODES && <OperationModes />}
                 {tabIndex === TabIndex.ERRORS_SOLUTIONS && <ErrorHandling />}
                 {tabIndex === TabIndex.PRODUCTION_TRANSFER && <ProductionWarning />}
             </Box>

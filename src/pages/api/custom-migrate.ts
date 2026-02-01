@@ -38,6 +38,9 @@ interface BackupData {
   entries: Entry[];
   assets: Asset[];
   locales: Locale[];
+  editorInterfaces?: any[];
+  roles?: any[];
+  webhooks?: any[];
 }
 
 interface Entry {
@@ -76,85 +79,100 @@ export default async function handler(
   res: NextApiResponse<CustomMigrateResponse>
 ) {
   res.setTimeout(300000);
-  
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
   try {
-    const { spaceId, sourceEnvironment, targetEnvironment, selectedContentTypes }: CustomMigrateRequest = req.body;
+    const { spaceId, sourceEnvironment, targetEnvironment, selectedContentTypes, action = 'preview', selectiveBackupFile }: CustomMigrateRequest & { action?: 'preview' | 'execute', selectiveBackupFile?: string } = req.body;
 
-    if (!spaceId || !sourceEnvironment || !targetEnvironment || !selectedContentTypes) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields: spaceId, sourceEnvironment, targetEnvironment, or selectedContentTypes' 
+    if (!spaceId || !sourceEnvironment || !targetEnvironment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: spaceId, sourceEnvironment, targetEnvironment'
       });
     }
 
     if (sourceEnvironment === targetEnvironment) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Source and target environments must be different' 
+      return res.status(400).json({
+        success: false,
+        error: 'Source and target environments must be different'
       });
     }
 
     const space = await ContentfulManagement.getSpace(spaceId);
     const spaceName = space?.name || spaceId;
-
-    const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName);
-    
-    if (!sourceBackupResult.success || !sourceBackupResult.backupFile) {
-      throw new Error('Failed to create source environment backup');
-    }
-
-    await sleep(BACKUP_DELAY);
-
-    const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
-    
-    if (!targetBackupResult.success || !targetBackupResult.backupFile) {
-      throw new Error('Failed to create target environment backup');
-    }
-
-    await sleep(BACKUP_DELAY);
-
     const backupDir = path.join(process.cwd(), 'backups', spaceId);
-    const sourceBackupPath = path.join(backupDir, sourceBackupResult.backupFile);
 
-    const sourceData: BackupData = JSON.parse(fs.readFileSync(sourceBackupPath, 'utf8'));
+    if (action === 'preview') {
+      if (!selectedContentTypes || selectedContentTypes.length === 0) {
+        return res.status(400).json({ success: false, error: 'No content types selected for preview' });
+      }
 
-    const selectiveBackup = createSelectiveBackup(sourceData, selectedContentTypes);
-    
-    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-    const selectiveBackupPath = path.join(backupDir, `selective-migrate-${spaceName}-${sourceEnvironment}-to-${targetEnvironment}-${timestamp}.json`);
-    fs.writeFileSync(selectiveBackupPath, JSON.stringify(selectiveBackup, null, 2));
 
-    const selectiveFileName = path.basename(selectiveBackupPath);
-    const importResult = await ContentfulCLI.restoreBackup(spaceId, selectiveFileName, targetEnvironment);
-    
-    if (!importResult) {
-      throw new Error('Failed to import selective backup');
+      const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName);
+      if (!sourceBackupResult.success || !sourceBackupResult.backupFile) {
+        throw new Error('Failed to create source environment backup');
+      }
+
+
+      const sourceBackupPath = path.join(backupDir, sourceBackupResult.backupFile);
+      const sourceData: BackupData = JSON.parse(fs.readFileSync(sourceBackupPath, 'utf8'));
+      const selectiveBackup = createSelectiveBackup(sourceData, selectedContentTypes);
+
+      const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+      const selectiveBackupPath = path.join(backupDir, `selective-migrate-${spaceName}-${sourceEnvironment}-to-${targetEnvironment}-${timestamp}.json`);
+      fs.writeFileSync(selectiveBackupPath, JSON.stringify(selectiveBackup, null, 2));
+
+      return res.status(200).json({
+        success: true,
+        sourceBackupFile: sourceBackupResult.backupFile,
+        previewData: {
+          entriesCount: selectiveBackup.entries.length,
+          assetsCount: selectiveBackup.assets.length,
+          contentTypesCount: selectiveBackup.contentTypes.length,
+          localesCount: selectiveBackup.locales.length,
+          selectiveBackupFile: path.basename(selectiveBackupPath)
+        }
+      });
+
+    } else if (action === 'execute') {
+      if (!selectiveBackupFile) {
+        return res.status(400).json({ success: false, error: 'Missing selectiveBackupFile for execution' });
+      }
+
+
+      const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
+      if (!targetBackupResult.success || !targetBackupResult.backupFile) {
+        throw new Error('Failed to create target environment backup');
+      }
+
+
+      await ContentfulCLI.restoreBackup(spaceId, selectiveBackupFile, targetEnvironment);
+
+      return res.status(200).json({
+        success: true,
+        targetBackupFile: targetBackupResult.backupFile
+      });
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid action' });
     }
-
-    return res.status(200).json({ 
-      success: true,
-      sourceBackupFile: sourceBackupResult.backupFile,
-      targetBackupFile: targetBackupResult.backupFile
-    });
 
   } catch (error) {
-    return res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     });
   }
 }
 
 function createSelectiveBackup(sourceData: BackupData, selectedContentTypeIds: string[]): BackupData {
-  const selectedContentTypes = sourceData.contentTypes.filter(ct => 
+  const selectedContentTypes = sourceData.contentTypes.filter(ct =>
     selectedContentTypeIds.includes(ct.sys.id)
   );
 
-  const selectedEntries = sourceData.entries.filter(entry => 
+  const selectedEntries = sourceData.entries.filter(entry =>
     selectedContentTypeIds.includes(entry.sys.contentType.sys.id)
   );
 
@@ -163,7 +181,7 @@ function createSelectiveBackup(sourceData: BackupData, selectedContentTypeIds: s
     extractAssetIds(entry.fields, referencedAssetIds);
   });
 
-  const selectedAssets = sourceData.assets.filter(asset => 
+  const selectedAssets = sourceData.assets.filter(asset =>
     referencedAssetIds.has(asset.sys.id)
   );
 
@@ -179,7 +197,7 @@ function createSelectiveBackup(sourceData: BackupData, selectedContentTypeIds: s
     });
   });
 
-  const selectedLocales = sourceData.locales.filter(locale => 
+  const selectedLocales = sourceData.locales.filter(locale =>
     usedLocaleCodes.has(locale.code)
   );
 
@@ -187,7 +205,12 @@ function createSelectiveBackup(sourceData: BackupData, selectedContentTypeIds: s
     contentTypes: selectedContentTypes,
     entries: selectedEntries,
     assets: selectedAssets,
-    locales: selectedLocales
+    locales: selectedLocales,
+    editorInterfaces: sourceData.editorInterfaces?.filter(ei =>
+      selectedContentTypeIds.includes(ei.sys.contentType.sys.id)
+    ) || [],
+    roles: [],
+    webhooks: []
   };
 }
 

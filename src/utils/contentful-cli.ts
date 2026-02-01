@@ -1,278 +1,201 @@
 import { spawn } from 'cross-spawn';
-import { spawnSync } from 'child_process';
-import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'fs';
 
 const CONTENTFUL_OAUTH_CLIENT_ID = process.env.CONTENTFUL_OAUTH_CLIENT_ID || '9f86a1d54f3d6f85c159468f5919d6e5d27716b3ed68fd01bd534e3dea2df864';
 const CONTENTFUL_OAUTH_REDIRECT_URI = process.env.CONTENTFUL_OAUTH_REDIRECT_URI || 'https://www.contentful.com/developers/cli-oauth-page/';
 const CONTENTFUL_OAUTH_SCOPE = process.env.CONTENTFUL_OAUTH_SCOPE || 'content_management_manage';
 
 export class ContentfulCLI {
-  static async getAuthUrl(): Promise<{ browser_url: string }> {
-    const authUrl = `https://be.contentful.com/oauth/authorize?response_type=token&client_id=${CONTENTFUL_OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(CONTENTFUL_OAUTH_REDIRECT_URI)}&scope=${CONTENTFUL_OAUTH_SCOPE}`;
-    
-    return { browser_url: authUrl };
-  }
-  
-  static async saveToken(token: string): Promise<boolean> {
-    const cliProcess = spawn('contentful', ['config', 'add', '--management-token', token], { 
-      stdio: 'pipe',
-      shell: true
+  static getAuthUrl(): string {
+    const params = new URLSearchParams({
+      response_type: 'token',
+      client_id: CONTENTFUL_OAUTH_CLIENT_ID,
+      redirect_uri: CONTENTFUL_OAUTH_REDIRECT_URI,
+      scope: CONTENTFUL_OAUTH_SCOPE,
     });
-    
-    return new Promise((resolve, reject) => {
-      cliProcess.on('close', (code: number) => {
-        if (code === 0) {
-          resolve(true);
-        } else {
-          reject(new Error(`Failed to save token, exit code: ${code}`));
-        }
-      });
-      
-      if (cliProcess.stderr) {
-        cliProcess.stderr.on('data', () => {
-        });
-      }
-    });
+    return `https://be.contentful.com/oauth/authorize?${params.toString()}`;
   }
-  
+
   static async checkAuthStatus(): Promise<{ loggedIn: boolean; config?: string }> {
-    try {
-      const token = process.env.CONTENTFUL_MANAGEMENT_TOKEN;
-      if (token) {
-        return { 
-          loggedIn: true,
-          config: `managementToken: ${token.substring(0, 5)}...`
-        };
-      }
-      
-      const checkProcess = spawn('contentful', ['config', 'list'], { 
-        stdio: 'pipe',
-        shell: true
-      });
-      
-      return new Promise((resolve, reject) => {
-        let output = '';
-        
-        if (checkProcess.stdout) {
-          checkProcess.stdout.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-        }
-        
-        checkProcess.on('close', (code: number) => {
-          if (code === 0) {
-            const isLoggedIn = output.includes('managementToken');
-            
-            if (isLoggedIn) {
-              const tokenMatch = output.match(/managementToken: ([^\s]+)/);
-              if (tokenMatch) {
-                process.env.CONTENTFUL_MANAGEMENT_TOKEN = tokenMatch[1];
-              }
-            }
-            
-            resolve({
-              loggedIn: isLoggedIn,
-              config: isLoggedIn ? output : undefined
-            });
-          } else {
-            resolve({ loggedIn: false });
-          }
-        });
-        
-        setTimeout(() => {
-          checkProcess.kill();
-          resolve({ loggedIn: false });
-        }, 5000);
-      });
-    } catch {
-      return { loggedIn: false };
-    }
-  }
-  
-  static isContentfulCliAvailable(): boolean {
-    try {
-      const localPath = path.join(process.cwd(), 'node_modules', '.bin', 'contentful');
-      if (fs.existsSync(localPath)) {
-        return true;
-      }
-      
-      if (process.platform !== 'win32') {
-        const result = spawnSync('which', ['contentful'], { stdio: 'pipe' });
-        return result.status === 0;
-      }
-      
-      const result = spawnSync('where', ['contentful'], { stdio: 'pipe', shell: true });
-      return result.status === 0;
-    } catch {
-      return false;
-    }
-  }
-  
-  static async logout(): Promise<boolean> {
     if (process.env.CONTENTFUL_MANAGEMENT_TOKEN) {
-      delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;
+      return { loggedIn: true, config: 'env' };
     }
-    
-    const configRemoved = await this.removeConfigFile();
-    
+
     try {
-      const authCachePath = path.join(process.cwd(), '.auth-cache.json');
-      if (fs.existsSync(authCachePath)) {
-        fs.unlinkSync(authCachePath);
-      }
-    } catch {
-    }
-    
-    return configRemoved;
-  }
-  
-  private static async removeConfigFile(): Promise<boolean> {
-    try {
-      const configPath = path.join(os.homedir(), '.contentfulrc.json');
-      
+      const homedir = require('os').homedir();
+      const configPath = path.join(homedir, '.contentfulrc.json');
       if (fs.existsSync(configPath)) {
-        fs.unlinkSync(configPath);
-        return true;
+        const fileContent = fs.readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(fileContent);
+        if (config.managementToken) {
+          return { loggedIn: true, config: 'file' };
+        }
       }
+    } catch (error) {
+      // Ignore error
+    }
+
+    return { loggedIn: false };
+  }
+
+  static async saveToken(token: string): Promise<void> {
+    const homedir = require('os').homedir();
+    const configPath = path.join(homedir, '.contentfulrc.json');
+    let config: any = {};
+
+    if (fs.existsSync(configPath)) {
+      try {
+        const fileContent = fs.readFileSync(configPath, 'utf-8');
+        config = JSON.parse(fileContent);
+      } catch (e) {
+        // Ignore error, start with empty config
+      }
+    }
+
+    config.managementToken = token;
+    // Also set the environment variable for the current process usage
+    process.env.CONTENTFUL_MANAGEMENT_TOKEN = token;
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  }
+
+  static async logout(): Promise<boolean> {
+    try {
+      const homedir = require('os').homedir();
+      const configPath = path.join(homedir, '.contentfulrc.json');
+
+      if (fs.existsSync(configPath)) {
+        const fileContent = fs.readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(fileContent);
+
+        if (config.managementToken) {
+          delete config.managementToken;
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+        }
+      }
+
+      delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;
       return true;
-    } catch {
+    } catch (error) {
+      console.error('Logout failed:', error);
       return false;
     }
   }
-  
-  static async createBackup(spaceId: string, environmentId: string, spaceName?: string): Promise<{ success: boolean; backupFile?: string }> {
-    try {
+  static async createBackup(
+    spaceId: string,
+    environmentId: string,
+    spaceName: string,
+    onLog?: (message: string) => void
+  ): Promise<{ success: boolean; backupFile?: string }> {
+    return new Promise((resolve) => {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupDir = path.join(process.cwd(), 'backups', spaceId);
-      fs.mkdirSync(backupDir, { recursive: true });
-      
-      const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-      const safeSpaceName = (spaceName || spaceId).replace(/[^a-zA-Z0-9-_]/g, '_');
-      const backupFile = path.join(backupDir, `backup-${safeSpaceName}-${environmentId}-${timestamp}.json`);
-      
+      const backupFile = path.join(backupDir, `${spaceName}-${environmentId}-${timestamp}.json`);
+
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+
+      onLog?.(`Starting export for space: ${spaceId}, environment: ${environmentId}`);
+      onLog?.(`Backup file: ${backupFile}`);
+
       const exportProcess = spawn('contentful', [
         'space', 'export',
         '--space-id', spaceId,
         '--environment-id', environmentId,
         '--content-file', backupFile,
-        '--include-drafts',
-        '--include-archived',
-        '--save-file'
-      ], { 
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true
+        '--skip-roles',
+        '--skip-webhooks'
+      ], {
+        env: { ...process.env, PATH: process.env.PATH }
       });
-      
-      if (exportProcess.stdin) {
-        exportProcess.stdin.write('y\ny\ny\ny\ny\n');
-      }
-      
-      return new Promise((resolve, reject) => {
-        let output = '';
-        
-        if (exportProcess.stdout) {
-          exportProcess.stdout.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-        }
-        
-        if (exportProcess.stderr) {
-          exportProcess.stderr.on('data', () => {
-          });
-        }
-        
-        exportProcess.on('close', (code: number) => {
-          if (code === 0) {
-            resolve({
-              success: true,
-              backupFile: path.basename(backupFile)
-            });
-          } else {
-            reject(new Error(`Failed to create backup: ${output}`));
-          }
+
+      if (exportProcess.stdout) {
+        exportProcess.stdout.on('data', (data) => {
+          onLog?.(data.toString());
         });
-      });
-    } catch (error) {
-      throw error;
-    }
-  }
-  
-  static async restoreBackup(spaceId: string, fileName: string, targetEnvironment: string): Promise<boolean> {
-    try {
-      const backupFile = path.join(process.cwd(), 'backups', spaceId, fileName);
-      
-      if (!fs.existsSync(backupFile)) {
-        throw new Error(`Backup file not found: ${backupFile}`);
       }
-      
-      const importProcess = spawn('contentful', [
+
+      if (exportProcess.stderr) {
+        exportProcess.stderr.on('data', (data) => {
+          onLog?.(data.toString());
+        });
+      }
+
+      exportProcess.on('close', (code) => {
+        if (code === 0) {
+          onLog?.('Export completed successfully.');
+          resolve({ success: true, backupFile: path.basename(backupFile) });
+        } else {
+          onLog?.(`Export failed with code ${code}`);
+          resolve({ success: false });
+        }
+      });
+    });
+  }
+
+  static async restoreBackup(
+    spaceId: string,
+    fileName: string,
+    environmentId: string,
+    onLog?: (message: string) => void,
+    skipPublishing: boolean = false
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
+
+      if (!fs.existsSync(backupFilePath)) {
+        reject(new Error(`Backup file not found: ${backupFilePath}`));
+        return;
+      }
+
+      onLog?.(`Starting import to space: ${spaceId}, environment: ${environmentId}`);
+      onLog?.(`Using backup file: ${fileName}`);
+      if (skipPublishing) {
+        onLog?.('Skipping content publishing (all items will be Draft).');
+      }
+
+      const args = [
         'space', 'import',
         '--space-id', spaceId,
-        '--environment-id', targetEnvironment,
-        '--content-file', backupFile
-      ], { 
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true
-      });
-      
-      if (importProcess.stdin) {
-        importProcess.stdin.write('y\ny\ny\ny\ny\n');
+        '--environment-id', environmentId,
+        '--content-file', backupFilePath,
+        '--content-model-only', 'false'
+      ];
+
+      if (skipPublishing) {
+        args.push('--skip-content-publishing');
       }
-      
-      return new Promise((resolve, reject) => {
-        let output = '';
-        let errorOutput = '';
-        
-        if (importProcess.stdout) {
-          importProcess.stdout.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-        }
-        
-        if (importProcess.stderr) {
-          importProcess.stderr.on('data', (data: Buffer) => {
-            errorOutput += data.toString();
-          });
-        }
-        
-        importProcess.on('close', async (code: number) => {
-          if (code === 0) {
-            resolve(true);
-          } else {
-            const fullOutput = output + errorOutput;
-            
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            
-            let jsonLogPath = null;
-            try {
-              const appFiles = fs.readdirSync('/app');
-              const jsonLogFile = appFiles.find(file => 
-                file.includes('contentful-import-error-log') && file.endsWith('.json')
-              );
-              
-              if (jsonLogFile) {
-                jsonLogPath = `/app/${jsonLogFile}`;
-              }
-            } catch {
-            }
-            
-            if (jsonLogPath) {
-              try {
-                const jsonLogContent = fs.readFileSync(jsonLogPath, 'utf8');
-                const jsonLog = JSON.parse(jsonLogContent);
-                reject(new Error(`JSON_LOG_CONTENT:${JSON.stringify(jsonLog, null, 2)}`));
-              } catch (jsonError) {
-                reject(new Error(`Failed to restore backup: ${fullOutput}`));
-              }
-            } else {
-              reject(new Error(`Failed to restore backup: ${fullOutput}`));
-            }
-          }
-        });
+
+      const importProcess = spawn('contentful', args, {
+        env: { ...process.env, PATH: process.env.PATH }
       });
-    } catch (error) {
-      throw error;
-    }
+
+      let errorOutput = '';
+
+      if (importProcess.stdout) {
+        importProcess.stdout.on('data', (data) => {
+          onLog?.(data.toString());
+        });
+      }
+
+      if (importProcess.stderr) {
+        importProcess.stderr.on('data', (data) => {
+          const text = data.toString();
+          errorOutput += text;
+          onLog?.(text);
+        });
+      }
+
+      importProcess.on('close', (code) => {
+        if (code === 0) {
+          onLog?.('Import completed successfully.');
+          resolve();
+        } else {
+          reject(new Error(`Import failed with code ${code}. Details: ${errorOutput}`));
+        }
+      });
+    });
   }
-} 
+}

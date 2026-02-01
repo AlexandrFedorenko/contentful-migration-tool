@@ -9,18 +9,18 @@ const SpaceSelector = React.memo(() => {
   const { state, dispatch } = useGlobalContext();
   const { spaces, loading, error } = useSpaces();
   const { isLoggedIn } = useAuth();
-  
+
   const handleChange = useCallback((event: SelectChangeEvent<string>) => {
     const spaceId = event.target.value as string;
     dispatch({ type: 'SET_SPACE_ID', payload: spaceId });
     dispatch({ type: 'SET_SOURCE_ENV', payload: '' });
     dispatch({ type: 'SET_TARGET_ENV', payload: '' });
   }, [dispatch]);
-  
+
   if (!isLoggedIn) {
     return null;
   }
-  
+
   if (loading) {
     return (
       <Box className={styles.loadingContainer}>
@@ -29,7 +29,7 @@ const SpaceSelector = React.memo(() => {
       </Box>
     );
   }
-  
+
   if (error) {
     return (
       <Box className={styles.errorContainer}>
@@ -39,7 +39,7 @@ const SpaceSelector = React.memo(() => {
       </Box>
     );
   }
-  
+
   if (spaces.length === 0) {
     return (
       <Box className={styles.emptyContainer}>
@@ -49,7 +49,7 @@ const SpaceSelector = React.memo(() => {
       </Box>
     );
   }
-  
+
   return (
     <Box className={styles.container}>
       <FormControl fullWidth>

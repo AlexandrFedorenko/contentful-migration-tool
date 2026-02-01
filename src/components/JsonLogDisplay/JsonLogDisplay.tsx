@@ -16,10 +16,10 @@ interface JsonLogDisplayProps {
   backupFileName?: string;
 }
 
-const JsonLogDisplay = React.memo<JsonLogDisplayProps>(({ 
-  open, 
-  onClose, 
-  onMinimize, 
+const JsonLogDisplay = React.memo<JsonLogDisplayProps>(({
+  open,
+  onClose,
+  onMinimize,
   errorMessage,
   backupFileName
 }) => {
@@ -55,7 +55,7 @@ const JsonLogDisplay = React.memo<JsonLogDisplayProps>(({
         ) : (
           <Box>
             <Typography variant="body1" className={styles.emptyState}>
-              No structured log data available. The restore operation may have completed successfully or encountered an issue that doesn't have detailed logging.
+              No structured log data available. The restore operation may have completed successfully or encountered an issue that doesn&apos;t have detailed logging.
             </Typography>
           </Box>
         )}

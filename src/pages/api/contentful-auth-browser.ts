@@ -41,21 +41,21 @@ export default async function handler(
 
         if (action === 'getAuthUrl' || action === 'start-login') {
             const authUrlResult = await ContentfulCLI.getAuthUrl();
-            
-            if (!authUrlResult?.browser_url) {
+
+            if (!authUrlResult) {
                 return res.status(500).json({
                     success: false,
                     message: 'Failed to get auth URL from Contentful CLI'
                 });
             }
-            
+
             return res.status(200).json({
                 success: true,
-                authUrl: authUrlResult.browser_url,
-                browser_url: authUrlResult.browser_url
+                authUrl: authUrlResult,
+                browser_url: authUrlResult
             });
-        } 
-        
+        }
+
         if (action === 'saveToken') {
             if (!token) {
                 return res.status(400).json({
@@ -63,32 +63,32 @@ export default async function handler(
                     message: 'Token is required'
                 });
             }
-            
+
             process.env.CONTENTFUL_MANAGEMENT_TOKEN = token;
             await ContentfulCLI.saveToken(token);
             authCache.reset();
             resetAuthCache();
-            
+
             return res.status(200).json({
                 success: true,
                 message: 'Token saved successfully'
             });
-        } 
-        
+        }
+
         if (action === 'logout') {
             const success = await ContentfulCLI.logout();
             authCache.reset();
             resetAuthCache();
-            
+
             res.setHeader('Set-Cookie', [
                 'contentful_token=; Path=/; Max-Age=0',
                 'contentful_logged_in=; Path=/; Max-Age=0'
             ]);
-            
+
             return res.status(200).json({
                 success: true,
-                message: success 
-                    ? 'Successfully logged out from Contentful' 
+                message: success
+                    ? 'Successfully logged out from Contentful'
                     : 'Logout process may not have completed successfully, but cache was cleared'
             });
         }

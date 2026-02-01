@@ -13,7 +13,7 @@ const ErrorHandling: React.FC = () => {
       </Typography>
 
       <Alert severity="info" sx={{ mb: 3 }}>
-        Most errors in this application are automatically parsed and displayed with detailed instructions. 
+        Most errors in this application are automatically parsed and displayed with detailed instructions.
         If you encounter an error, check the error modal for step-by-step solutions.
       </Alert>
 
@@ -39,7 +39,7 @@ const ErrorHandling: React.FC = () => {
                 <Box component="ol" sx={{ pl: 2, m: 0, fontSize: '0.875rem' }}>
                   <li>Go to Contentful App → Content Model</li>
                   <li>Find the content type with the problematic field</li>
-                  <li>Set the field as "optional" first</li>
+                  <li>Set the field as &quot;optional&quot; first</li>
                   <li>Save the content type</li>
                   <li>Then delete the field completely</li>
                   <li>Retry the operation</li>
@@ -125,7 +125,7 @@ const ErrorHandling: React.FC = () => {
             Problem:
           </Typography>
           <Typography paragraph>
-            When restoring or migrating, if the content model (Content Type structure) differs between 
+            When restoring or migrating, if the content model (Content Type structure) differs between
             source and target environments, the operation may fail.
           </Typography>
 
@@ -154,7 +154,7 @@ const ErrorHandling: React.FC = () => {
             <li>
               <strong>Option 3: Use Custom Migration</strong>
               <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>Use "Custom Migrate" to migrate the content type first</li>
+                <li>Use &quot;Custom Migrate&quot; to migrate the content type first</li>
                 <li>Then migrate the entries</li>
               </Box>
             </li>
@@ -171,17 +171,17 @@ const ErrorHandling: React.FC = () => {
             Problem:
           </Typography>
           <Typography paragraph>
-            Cannot authenticate or "Token not found" errors.
+            Cannot authenticate or &quot;Token not found&quot; errors.
           </Typography>
 
           <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
             Solution:
           </Typography>
           <Box component="ol" sx={{ pl: 2 }}>
-            <li>Click "Login to Contentful" and complete the OAuth flow</li>
-            <li>If using Management Token, ensure it's set in <code>.env</code> file</li>
+            <li>Click &quot;Login to Contentful&quot; and complete the OAuth flow</li>
+            <li>If using Management Token, ensure it&apos;s set in <code>.env</code> file</li>
             <li>Check that the token has proper permissions (Content Management API access)</li>
-            <li>Try "FORCE RESET" button to clear authentication cache</li>
+            <li>Try &quot;FORCE RESET&quot; button to clear authentication cache</li>
           </Box>
         </AccordionDetails>
       </Accordion>
