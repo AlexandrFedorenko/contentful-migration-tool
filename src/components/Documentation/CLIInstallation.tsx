@@ -33,7 +33,7 @@ const CLIInstallation: React.FC = () => {
           npm install -g contentful-cli
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Note: Our setup script automatically installs Contentful CLI. Run <code>npm run setup</code> after cloning the repository.
+          Contentful CLI is required for some advanced migration features.
         </Typography>
       </Paper>
 

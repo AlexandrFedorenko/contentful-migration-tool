@@ -1,10 +1,9 @@
-# Contentful Migration Tool (Desktop App)
+# Contentful Migration Tool (Web App)
 
-A professional desktop application for creating backups, migrating content, and managing Contentful environments. Built with **Electron** and **Next.js**, this tool provides a robust and user-friendly interface for your Contentful operations.
+A professional web application for creating backups, migrating content, and managing Contentful environments. Built with **Next.js**, this tool provides a robust and user-friendly interface for your Contentful operations.
 
 ## Features
 
-- **Desktop Experience**: Native application window with system integration.
 - **Secure Authentication**: Browser-based Contentful authentication flow.
 - **Environment Management**: Easy selection of Spaces and Environments.
 - **Smart Backups**: Create full content backups including entries, assets, and content types.
@@ -39,26 +38,12 @@ A professional desktop application for creating backups, migrating content, and 
 
 ## Development
 
-### Desktop App (Electron + Next.js)
-
-To start the full desktop application in development mode:
+To start the application in development mode:
 
 ```bash
 npm run dev
 ```
 
-This command will:
-1. Start the Next.js local server on port 3000.
-2. Launch the Electron application window pointing to the local server.
-3. Enable Hot Module Replacement (HMR).
-
-### Web Version Only (Next.js)
-
-If you only want to work on the UI/logic without the Electron wrapper:
-
-```bash
-npm run next:dev
-```
 *Access the app at http://localhost:3000*
 
 This command will:
@@ -67,30 +52,16 @@ This command will:
 
 ## Building for Production
 
-To build the desktop application for your specific platform:
+To build the application for production deployment:
 
-### Windows
 ```bash
-npm run build:win
+npm run build
+npm start
 ```
-*Output: `dist/Contentful Migration Tool Setup <version>.exe`*
-
-### macOS
-```bash
-npm run build:mac
-```
-*Output: `dist/Contentful Migration Tool-<version>.dmg`*
-
-### Linux
-```bash
-npm run build:linux
-```
-*Output: `dist/Contentful Migration Tool-<version>.AppImage`*
 
 ## Project Structure
 
-- **`electron/`**: Main process code for Electron (`main.js`, `preload.js`).
-- **`src/`**: Next.js source code (Renderer process).
+- **`src/`**: Next.js source code.
   - **`pages/`**: Application routes and API endpoints.
   - **`components/`**: React UI components.
   - **`utils/`**: Helper functions and Contentful SDK integration.
@@ -101,9 +72,8 @@ npm run build:linux
 
 | Issue | Solution |
 |-------|----------|
-| **Window doesn't open** | Ensure port 3000 is free. Run `npm run dev` and wait for "Ready" message. |
+| **App doesn't open** | Ensure port 3000 is free. Run `npm run dev` and check the console. |
 | **Login fails** | Check your internet connection. The tool requires access to Contentful's API. |
-| **Build fails** | Ensure you have the necessary build tools for your OS installed (e.g., Visual Studio Build Tools for Windows). |
 
 ## License
 
