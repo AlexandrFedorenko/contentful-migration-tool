@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { create, DiffPatcher } from 'jsondiffpatch';
-import * as htmlFormatter from 'jsondiffpatch/formatters/html';
+
 import { Box, Paper, Typography, Tabs, Tab, Grid, Divider, Chip, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import ArticleIcon from '@mui/icons-material/Article';

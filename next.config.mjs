@@ -22,7 +22,6 @@ const nextConfig = {
         '**/.git',
         '**/.next',
         '**/dist',
-        '**/electron',
         '**/backups',
         '**/.idea',
         '**/.vscode',

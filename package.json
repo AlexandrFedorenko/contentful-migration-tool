@@ -1,20 +1,11 @@
 {
   "name": "contentful-migration-tool",
   "version": "1.0.0",
-  "description": "Desktop migration tool for Contentful CMS",
-  "main": "electron/main.js",
-  "author": "Your Name",
-  "license": "MIT",
+  "description": "Migration tool for Contentful CMS",
   "scripts": {
-    "next:dev": "next dev",
-    "next:build": "next build",
-    "next:start": "next start",
-    "electron:dev": "cross-env NODE_ENV=development electron .",
-    "dev": "concurrently \"npm run next:dev\" \"wait-on http://localhost:3000 && npm run electron:dev\"",
-    "build": "npm run next:build && electron-builder",
-    "build:win": "npm run next:build && electron-builder --win",
-    "build:mac": "npm run next:build && electron-builder --mac",
-    "build:linux": "npm run next:build && electron-builder --linux",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
@@ -26,7 +17,6 @@
     "contentful-management": "^10.46.0",
     "cross-spawn": "^7.0.3",
     "dotenv": "^16.5.0",
-    "jsondiffpatch": "^0.7.3",
     "next": "13.4.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -39,63 +29,8 @@
     "@types/react": "18.2.6",
     "@types/react-dom": "18.2.4",
     "@types/uuid": "^9.0.1",
-    "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
-    "electron": "^39.2.7",
-    "electron-builder": "^26.4.0",
     "eslint": "8.40.0",
     "eslint-config-next": "13.4.2",
-    "typescript": "5.0.4",
-    "wait-on": "^9.0.3"
-  },
-  "build": {
-    "appId": "com.contentful.migrationtool",
-    "productName": "Contentful Migration Tool",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/contentful-cli",
-      "node_modules/next",
-      ".next"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      ".next/**/*",
-      "public/**/*",
-      "package.json",
-      "node_modules/**/*",
-      "!node_modules/electron",
-      "!node_modules/@types",
-      "!node_modules/eslint",
-      "!node_modules/typescript"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/icon.png"
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "icon": "public/icon.png",
-      "category": "public.app-category.developer-tools"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "icon": "public/icon.png",
-      "category": "Development"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+    "typescript": "5.0.4"
   }
 }
