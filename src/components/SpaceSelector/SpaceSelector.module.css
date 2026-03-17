@@ -1,5 +1,5 @@
 .container {
-  margin-bottom: 24px;
+  /* No default margin - let parent control spacing */
 }
 
 .loadingContainer {

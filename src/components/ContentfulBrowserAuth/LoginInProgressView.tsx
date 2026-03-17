@@ -1,6 +1,9 @@
 import React from 'react';
-import { Box, Button, TextField, Typography, CircularProgress } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, ExternalLink, ShieldCheck, Key, Zap } from "lucide-react";
+
 
 interface LoginInProgressViewProps {
     token: string;
@@ -24,85 +27,101 @@ const LoginInProgressView = React.memo<LoginInProgressViewProps>(({
     isLoading
 }) => {
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                pt: '200px', // 200px from top
-                mb: 3
-            }}
-        >
-            <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
-                Contentful Migration Tool
-            </Typography>
+        <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center animate-in fade-in duration-700">
+            <div className="relative mb-12">
+                <div className="absolute inset-0 blur-3xl bg-primary/20 rounded-full animate-pulse" />
+                <header className="relative space-y-4">
+                    <h1 className="text-5xl font-black uppercase tracking-tighter text-foreground sm:text-7xl">
+                        Contentful <span className="text-primary">CMT</span>
+                    </h1>
+                    <div className="flex items-center justify-center gap-4">
+                        <div className="h-px w-12 bg-border/50" />
+                        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.4em] whitespace-nowrap">
+                            Neural Sync In Progress
+                        </p>
+                        <div className="h-px w-12 bg-border/50" />
+                    </div>
+                </header>
+            </div>
 
-            <Typography variant="body1" sx={{ mb: 3, textAlign: 'center', color: 'text.secondary', maxWidth: '600px' }}>
-                Authorization page should be open in a new tab. After completing authorization, copy the token and paste it below.
-            </Typography>
+            <div className="max-w-md w-full space-y-8">
+                <div className="p-6 rounded-2xl bg-card border-border/50 space-y-6 shadow-2xl">
+                    <p className="text-sm font-medium text-muted-foreground leading-relaxed italic">
+                        The authorization manifest is active in an external terminal tab. Copy the secure token to establish the link.
+                    </p>
 
-            {authUrl && (
-                <Box sx={{ mb: 3, display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        onClick={onOpenAuthWindow}
-                        disabled={isLoading}
-                        startIcon={<OpenInNewIcon />}
-                        size="small"
-                    >
-                        Open Authorization Page
-                    </Button>
-                </Box>
-            )}
+                    {authUrl && (
+                        <Button
+                            variant="secondary"
+                            onClick={onOpenAuthWindow}
+                            disabled={isLoading}
+                            className="w-full gap-2 text-[10px] font-black uppercase tracking-widest bg-muted/20 border border-border/50 hover:bg-muted/30 transition-all"
+                        >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Return to Authorization Tab
+                        </Button>
+                    )}
 
-            <Box sx={{ width: '100%', maxWidth: '500px', mb: 2 }}>
-                <TextField
-                    fullWidth
-                    label="Contentful Token"
-                    variant="outlined"
-                    value={token}
-                    onChange={(e) => onTokenChange(e.target.value)}
-                    placeholder="Paste your token here"
-                    sx={{ mb: 2 }}
-                    helperText="Copy the token from the authorization page and paste it here"
-                />
-            </Box>
+                    <div className="h-px w-full bg-border/50" />
 
-            {error && (
-                <Typography color="error" sx={{ mb: 2, textAlign: 'center', maxWidth: '500px' }}>
-                    {error}
-                </Typography>
-            )}
+                    <div className="space-y-4 text-left">
+                        <Label htmlFor="token" className="text-[10px] font-black uppercase tracking-widest text-primary px-1 flex items-center gap-2">
+                            <Key className="h-3 w-3" /> Secure Token Manifest
+                        </Label>
+                        <div className="relative group">
+                            <Input
+                                id="token"
+                                value={token}
+                                onChange={(e) => onTokenChange(e.target.value)}
+                                placeholder="PASTE_MANIFEST_TOKEN_HERE"
+                                className="bg-muted/40 border-border/50 h-12 text-emerald-400 font-mono text-xs placeholder:text-muted-foreground/30 focus-visible:ring-primary/30"
+                            />
+                            <div className="absolute inset-y-0 right-3 flex items-center">
+                                <Zap className="h-4 w-4 text-primary opacity-30 group-focus-within:opacity-100 transition-opacity" />
+                            </div>
+                        </div>
+                        <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest pl-1 leading-relaxed">
+                            * Tokens expire after session termination. Ensure direct copy-paste.
+                        </p>
+                    </div>
 
-            <Box sx={{ display: 'flex', gap: 2, width: '100%', maxWidth: '500px', mb: 3 }}>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={onSaveToken}
-                    disabled={isLoading || !token.trim()}
-                    fullWidth
-                    size="large"
-                    sx={{ py: 1.5 }}
-                >
-                    {isLoading ? <CircularProgress size={20} /> : 'SAVE TOKEN'}
-                </Button>
-                <Button
-                    variant="outlined"
-                    onClick={onCancel}
-                    disabled={isLoading}
-                    fullWidth
-                    size="large"
-                    sx={{ py: 1.5 }}
-                >
-                    CANCEL
-                </Button>
-            </Box>
+                    {error && (
+                        <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/20 text-rose-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-in slide-in-from-top-2">
+                            <ShieldCheck className="h-4 w-4 shrink-0" />
+                            {error}
+                        </div>
+                    )}
 
-            <Typography variant="body2" color="text.secondary">
-                Auth Status: <strong>Authorization in progress...</strong>
-            </Typography>
-        </Box>
+                    <div className="flex gap-3">
+                        <Button
+                            onClick={onSaveToken}
+                            disabled={isLoading || !token.trim()}
+                            className="flex-1 py-6 text-xs font-black uppercase tracking-widest gap-2 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 transition-all active:scale-[0.98]"
+                        >
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                            Commit Link
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={onCancel}
+                            disabled={isLoading}
+                            className="px-6 py-6 text-xs font-black uppercase tracking-widest gap-2 rounded-xl border border-border/50 hover:bg-muted/20 transition-all text-muted-foreground"
+                        >
+                            Abort
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-4 pt-4">
+                    <div className="flex items-center gap-3 py-2 px-6 rounded-full bg-amber-500/5 border border-amber-500/10">
+                        <Loader2 className="h-3 w-3 text-amber-500 animate-spin" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500/80">
+                            Protocol Status: <strong className="text-amber-500 uppercase">Synchronizing...</strong>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 });
 

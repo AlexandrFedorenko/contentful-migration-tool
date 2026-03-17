@@ -1,6 +1,12 @@
-import React, { useCallback } from 'react';
-import { FormControl, Select, MenuItem, FormHelperText, SelectChangeEvent, Typography, Box, InputLabel } from '@mui/material';
+import React from 'react';
 import { Environment } from '@/types/common';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 
 interface EnvironmentSelectorProps {
   environments: Environment[];
@@ -11,41 +17,41 @@ interface EnvironmentSelectorProps {
   disabledOption?: string;
 }
 
-const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({ environments, value, onChange, label, disabled, disabledOption }) => {
-  const handleChange = useCallback((event: SelectChangeEvent) => {
-    onChange(event.target.value);
-  }, [onChange]);
-
-  const labelId = `${label.replace(/\s/g, '-').toLowerCase()}-label`;
-  const selectId = label.replace(/\s/g, '-').toLowerCase();
-
+const EnvironmentSelector = React.memo<EnvironmentSelectorProps>(({
+  environments,
+  value,
+  onChange,
+  label,
+  disabled,
+  disabledOption
+}) => {
   return (
-    <Box sx={{ mb: 3 }}>
-      <FormControl fullWidth>
-        <InputLabel id={labelId}>{label}</InputLabel>
-        <Select
-          labelId={labelId}
-          id={selectId}
-          value={value}
-          onChange={handleChange}
-          disabled={disabled}
-          label={label}
-        >
-          <MenuItem value="">
-            <em>Select a Contentful environment</em>
-          </MenuItem>
+    <div className="space-y-3">
+      <span className="text-sm font-semibold text-muted-foreground block">{label}</span>
+      <Select
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+      >
+        <SelectTrigger className="w-full bg-background/50">
+          <SelectValue placeholder="Select a Contentful environment" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="NO_SELECTION_PLACEHOLDER" disabled className="text-muted-foreground italic">
+            Select a Contentful environment
+          </SelectItem>
           {environments.map((env) => (
-            <MenuItem
+            <SelectItem
               key={env.id}
               value={env.id}
               disabled={env.id === disabledOption}
             >
               {env.name}
-            </MenuItem>
+            </SelectItem>
           ))}
-        </Select>
-      </FormControl>
-    </Box>
+        </SelectContent>
+      </Select>
+    </div>
   );
 });
 

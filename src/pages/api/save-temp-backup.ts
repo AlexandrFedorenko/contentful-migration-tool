@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import * as fs from 'fs';
 import * as path from 'path';
+import { BackupService } from '@/utils/backup-service';
+import { getAuth } from "@clerk/nextjs/server";
 
 interface SaveTempBackupRequest {
     spaceId: string;
@@ -28,7 +30,14 @@ export default async function handler(
         });
     }
 
+    const { userId } = getAuth(req);
+    if (!userId) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
     try {
+        await BackupService.checkBackupLimit(spaceId, userId);
+
         const backupDir = path.join(process.cwd(), 'backups', spaceId);
         fs.mkdirSync(backupDir, { recursive: true });
 
@@ -37,7 +46,7 @@ export default async function handler(
 
         return res.status(200).json({
             success: true,
-            fileName
+            data: { fileName }
         });
     } catch (error) {
         return res.status(500).json({

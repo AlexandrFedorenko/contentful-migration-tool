@@ -2,17 +2,12 @@ import { ApiError } from './api';
 
 export function handleError(error: unknown): string {
   if (error instanceof ApiError) {
-    const statusText = error.status ? ` (${error.status})` : '';
-    return `API Error${statusText}: ${error.message}`;
+    return `API Error${error.status ? ` (${error.status})` : ''}: ${error.message}`;
   }
-  
-  if (error instanceof Error) {
-    return error.message;
-  }
-  
-  return 'An unknown error occurred';
+
+  return error instanceof Error ? error.message : 'An unknown error occurred';
 }
 
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
-} 
+}

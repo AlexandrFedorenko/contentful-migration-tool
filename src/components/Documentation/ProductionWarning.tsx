@@ -1,165 +1,190 @@
 import React from 'react';
-import { Box, Typography, Paper, Alert, Stepper, Step, StepLabel, StepContent } from '@mui/material';
-import WarningIcon from '@mui/icons-material/Warning';
-import BackupIcon from '@mui/icons-material/Backup';
-import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ShieldAlert,
+  AlertTriangle,
+  ShieldCheck,
+  Database,
+  CheckCircle2,
+  History,
+  FlaskConical,
+  Zap,
+  ClipboardCheck,
+  Lock
+} from "lucide-react";
+
+const ProtocolStep = ({ number, title, content }: { number: number, title: string, content: React.ReactNode }) => (
+  <div className="flex gap-4 relative pb-8 last:pb-0">
+    <div className="flex flex-col items-center shrink-0">
+      <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-[10px] font-black text-amber-500 shadow-lg shadow-amber-500/10">
+        {number}
+      </div>
+      <div className="w-[1px] h-full bg-border/50 mt-2" />
+    </div>
+    <div className="pt-1 flex-1">
+      <h4 className="text-sm font-black uppercase tracking-tight text-foreground mb-2">{title}</h4>
+      <div className="text-[11px] font-medium text-muted-foreground leading-relaxed italic">
+        {content}
+      </div>
+    </div>
+  </div>
+);
 
 const ProductionWarning: React.FC = () => {
   return (
-    <Box>
-      <Alert severity="warning" sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Beta Testing Notice
-        </Typography>
-        <Typography>
-          This application is currently in <strong>beta testing</strong>. While we strive for reliability,
-          please exercise caution when performing operations, especially on production environments.
-        </Typography>
-      </Alert>
+    <div className="space-y-12">
+      <header className="space-y-2 border-l-4 border-rose-500 pl-6">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-foreground">
+          Critical Safeguards
+        </h2>
+        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.3em]">Production integrity & operational risk</p>
+      </header>
 
-      <Paper elevation={2} sx={{ p: 3, mb: 3, bgcolor: 'warning.main', color: 'warning.contrastText' }}>
-        <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <WarningIcon />
-          Critical: Backup Before Production Operations
-        </Typography>
-        <Typography paragraph sx={{ mt: 2 }}>
-          Before performing <strong>any</strong> migration, restore, or content modification operations on
-          production environments, you <strong>must</strong> create a backup.
-        </Typography>
-        <Typography paragraph>
-          Production data is critical and cannot be easily recovered. Always verify that backups exist
-          and are accessible before proceeding with any operations.
-        </Typography>
-      </Paper>
+      <div className="flex gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg shadow-xl shadow-amber-500/5 overflow-hidden relative items-start">
+        <div className="absolute -top-4 -right-4 opacity-5">
+          <FlaskConical className="h-24 w-24 text-amber-500" />
+        </div>
+        <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+        <div className="relative z-10">
+          <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">Beta Deployment Notice</p>
+          <p className="text-sm font-medium text-foreground/80 leading-relaxed max-w-2xl">
+            This terminal is currently in <strong className="text-amber-500">Alpha-Beta phase</strong>.
+            While engineering strives for absolute stability, caution is mandatory.
+            Exercise clinical precision during production-level write operations.
+          </p>
+        </div>
+      </div>
 
-      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <BackupIcon />
-          Pre-Production Checklist
-        </Typography>
-        <Stepper orientation="vertical">
-          <Step active>
-            <StepLabel>Verify Backup Directory</StepLabel>
-            <StepContent>
-              <Typography>
-                Check that the <code>backups/{'{space_id}'}/</code> directory exists and contains recent backup files.
-              </Typography>
-            </StepContent>
-          </Step>
-          <Step active>
-            <StepLabel>Create Fresh Backup</StepLabel>
-            <StepContent>
-              <Typography>
-                Create a new backup of the production environment before making any changes.
-                This ensures you have a recent recovery point.
-              </Typography>
-            </StepContent>
-          </Step>
-          <Step active>
-            <StepLabel>Verify Backup File</StepLabel>
-            <StepContent>
-              <Typography>
-                Confirm the backup file was created successfully:
-              </Typography>
-              <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>Check file size (should not be empty or very small)</li>
-                <li>Verify file timestamp is recent</li>
-                <li>Ensure file is in JSON format</li>
-              </Box>
-            </StepContent>
-          </Step>
-          <Step active>
-            <StepLabel>Test in Non-Production First</StepLabel>
-            <StepContent>
-              <Typography>
-                If possible, test your migration/restore operations in a development or staging
-                environment first to identify any potential issues.
-              </Typography>
-            </StepContent>
-          </Step>
-          <Step active>
-            <StepLabel>Document Your Actions</StepLabel>
-            <StepContent>
-              <Typography>
-                Keep a record of:
-              </Typography>
-              <Box component="ul" sx={{ pl: 2, mt: 1 }}>
-                <li>Which environments you&apos;re working with</li>
-                <li>What operations you&apos;re performing</li>
-                <li>Backup file names and locations</li>
-                <li>Any errors encountered</li>
-              </Box>
-            </StepContent>
-          </Step>
-        </Stepper>
-      </Paper>
+      <Card className="bg-rose-500/10 border-rose-500/20 shadow-2xl overflow-hidden relative group">
+        <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+          <ShieldAlert className="h-32 w-32 text-rose-500" />
+        </div>
+        <CardHeader className="p-8 border-b border-rose-500/10">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30">
+              <ShieldAlert className="h-6 w-6 text-rose-500" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-black uppercase tracking-tight text-rose-500">
+                Mandate: Archival Priming
+              </CardTitle>
+              <p className="text-[10px] font-bold text-rose-500/60 uppercase tracking-[0.2em] mt-1">Zero-Recovery Environment Protection</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-8 space-y-6">
+          <p className="text-sm text-foreground/80 leading-relaxed font-medium">
+            Before initiating <strong>any</strong> destructive payload or structural re-alignment on
+            production infrastructures, you <strong>must</strong> execute a full state snapshot.
+          </p>
+          <p className="text-xs text-muted-foreground font-medium">
+            Production registries utilize immutable IDs; accidental corruption cannot be reversed without
+            valid manifest files. Verify local storage integrity before engagement.
+          </p>
+        </CardContent>
+      </Card>
 
-      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <VerifiedUserIcon />
-          Best Practices
-        </Typography>
-        <Box component="ul" sx={{ pl: 2 }}>
-          <li>
-            <strong>Always backup before restore:</strong> Even when restoring from a backup,
-            create a backup of the current state first
-          </li>
-          <li>
-            <strong>Use staging environments:</strong> Test migrations in non-production environments first
-          </li>
-          <li>
-            <strong>Verify backups regularly:</strong> Periodically check that your backup files are valid and accessible
-          </li>
-          <li>
-            <strong>Keep multiple backups:</strong> Don&apos;t rely on a single backup - keep multiple versions
-          </li>
-          <li>
-            <strong>Monitor operations:</strong> Watch the status messages and error logs during operations
-          </li>
-          <li>
-            <strong>Have a rollback plan:</strong> Know how to restore from backup if something goes wrong
-          </li>
-        </Box>
-      </Paper>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Pre-Production Checklist */}
+        <div className="space-y-6">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground px-2 flex items-center gap-2">
+            <ClipboardCheck className="h-3 w-3" />
+            Engagement Checklist
+          </h3>
+          <Card className="bg-card border-border/50 shadow-xl">
+            <CardContent className="p-8">
+              <div className="space-y-0">
+                <ProtocolStep
+                  number={1}
+                  title="Vault Validation"
+                  content={
+                    <span>Verify <code className="text-primary">backups/{'{space_id}'}/</code> directory accessibility.</span>
+                  }
+                />
+                <ProtocolStep
+                  number={2}
+                  title="Fresh Snapshot"
+                  content="Generate a T-minus zero backup immediately before execution."
+                />
+                <ProtocolStep
+                  number={3}
+                  title="Heuristic Verification"
+                  content="Confirm manifest size is non-zero and timestamp is synchronized."
+                />
+                <ProtocolStep
+                  number={4}
+                  title="Sandbox Simulation"
+                  content="Validate logic on a development/staging node before production push."
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      <Paper elevation={2} sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          What to Do If Something Goes Wrong
-        </Typography>
-        <Typography paragraph>
-          If an operation fails or produces unexpected results:
-        </Typography>
-        <Box component="ol" sx={{ pl: 2 }}>
-          <li>
-            <strong>Stop immediately:</strong> Don&apos;t continue with additional operations
-          </li>
-          <li>
-            <strong>Check the error message:</strong> Review the error modal for detailed instructions
-          </li>
-          <li>
-            <strong>Verify backup exists:</strong> Ensure you have a recent backup to restore from
-          </li>
-          <li>
-            <strong>Restore from backup:</strong> If needed, restore the environment from the most recent backup
-          </li>
-          <li>
-            <strong>Review logs:</strong> Check the application logs and Contentful import logs for details
-          </li>
-          <li>
-            <strong>Contact support:</strong> If the issue persists, contact the maintainer or open an issue
-          </li>
-        </Box>
-      </Paper>
+        {/* Best Practices */}
+        <div className="space-y-6">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground px-2 flex items-center gap-2">
+            <ShieldCheck className="h-3 w-3" />
+            Operational Doctrine
+          </h3>
+          <Card className="bg-card border-border/50 border-l-primary/30 shadow-xl h-full">
+            <CardContent className="p-8 space-y-6">
+              {[
+                { icon: <History className="h-4 w-4" />, label: "Pre-Restore archival is mandatory", desc: "Backup the current target state before injecting external manifests." },
+                { icon: <Database className="h-4 w-4" />, label: "Multi-Version retention", desc: "Retain at least 3 historical snapshots to ensure rollback capability." },
+                { icon: <Lock className="h-4 w-4" />, label: "Target node validation", desc: "Double-check Environment ID matches intended deployment target." },
+                { icon: <Zap className="h-4 w-4" />, label: "Protocol Monitoring", desc: "Observe terminal logs throughout the entire data transmission phase." }
+              ].map((item, i) => (
+                <div key={i} className="flex gap-4 group">
+                  <div className="h-8 w-8 rounded-lg bg-primary/5 flex items-center justify-center text-primary/40 group-hover:text-primary transition-colors">
+                    {item.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h5 className="text-[10px] font-black uppercase tracking-widest text-foreground/90 mb-1">{item.label}</h5>
+                    <p className="text-[11px] font-medium text-muted-foreground leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
-      <Alert severity="info" sx={{ mt: 3 }}>
-        <Typography variant="body2">
-          <strong>Remember:</strong> It&apos;s always better to be cautious and create multiple backups
-          than to risk losing production data. When in doubt, create a backup first.
-        </Typography>
-      </Alert>
-    </Box>
+      {/* Rollback Plan */}
+      <Card className="bg-card border-border/50 border-b-rose-500 shadow-2xl overflow-hidden">
+        <CardHeader className="p-6 bg-rose-500/5">
+          <CardTitle className="text-lg font-black uppercase tracking-tight text-rose-500">
+            Emergency Rollback Protocol
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h5 className="text-[10px] font-black uppercase tracking-widest text-foreground opacity-60">Immediate Response:</h5>
+              <ol className="space-y-3 list-decimal pl-4">
+                {["Terminate all active IO/Sync immediately.", "Audit error modal for failure signature.", "Locate the pre-deployment snapshot.", "Initiate 'Restore Mode' on protected node."].map((step, i) => (
+                  <li key={i} className="text-[11px] font-medium text-muted-foreground">{step}</li>
+                ))}
+              </ol>
+            </div>
+            <div className="space-y-4 border-l border-border/50 pl-8">
+              <h5 className="text-[10px] font-black uppercase tracking-widest text-foreground opacity-60">Status Verification:</h5>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-[11px] font-medium text-muted-foreground italic">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  Review terminal output for 'SYNC COMPLETED'
+                </div>
+                <div className="flex items-center gap-3 text-[11px] font-medium text-muted-foreground italic">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  Re-scan via 'Diff Analysis' tool
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
 export default ProductionWarning;
-

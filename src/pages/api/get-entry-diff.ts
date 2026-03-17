@@ -10,10 +10,16 @@ interface DiffRequest {
 
 interface DiffResponse {
     success: boolean;
-    sourceEntry?: any;
-    targetEntry?: any;
+    data?: {
+        sourceEntry: unknown;
+        targetEntry: unknown;
+    };
     error?: string;
 }
+
+import { getAuth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 
 export default async function handler(
     req: NextApiRequest,
@@ -23,7 +29,18 @@ export default async function handler(
         return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
+    const { userId } = getAuth(req);
+    if (!userId) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
     try {
+        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+        if (!user || !user.contentfulToken) {
+            return res.status(400).json({ success: false, error: "Contentful token not found" });
+        }
+        const token = decrypt(user.contentfulToken);
+
         const { spaceId, sourceEnvironment, targetEnvironment, entryId } = req.body as DiffRequest;
 
         if (!spaceId || !sourceEnvironment || !targetEnvironment || !entryId) {
@@ -34,14 +51,16 @@ export default async function handler(
         }
 
         const [sourceEntry, targetEntry] = await Promise.all([
-            ContentfulManagement.getEntry(spaceId, sourceEnvironment, entryId),
-            ContentfulManagement.getEntry(spaceId, targetEnvironment, entryId)
+            ContentfulManagement.getEntry(spaceId, sourceEnvironment, entryId, token),
+            ContentfulManagement.getEntry(spaceId, targetEnvironment, entryId, token)
         ]);
 
         return res.status(200).json({
             success: true,
-            sourceEntry,
-            targetEntry
+            data: {
+                sourceEntry,
+                targetEntry
+            }
         });
 
     } catch (error) {

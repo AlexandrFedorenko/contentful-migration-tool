@@ -1,44 +1,63 @@
 import React from 'react';
 import {
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Warning as WarningIcon,
-  Pending as PendingIcon
-} from '@mui/icons-material';
-import { CircularProgress } from '@mui/material';
+  CheckCircle2 as CheckCircleIcon,
+  AlertCircle as ErrorIcon,
+  AlertTriangle as WarningIcon,
+  Clock as PendingIcon,
+  Loader2
+} from 'lucide-react';
+
 import { RestoreStep } from '@/components/RestoreProgressModal/types';
 
 export const getStepIcon = (status: RestoreStep['status']): React.ReactElement => {
   switch (status) {
     case 'completed':
-      return <CheckCircleIcon color="success" />;
+      return <CheckCircleIcon className="h-5 w-5" />;
     case 'error':
-      return <ErrorIcon color="error" />;
+      return <ErrorIcon className="h-5 w-5" />;
     case 'warning':
-      return <WarningIcon color="warning" />;
+      return <WarningIcon className="h-5 w-5" />;
     case 'in-progress':
-      return <CircularProgress size={20} />;
+      return <Loader2 className="h-5 w-5 animate-spin" />;
     case 'pending':
     default:
-      return <PendingIcon color="disabled" />;
+      return <PendingIcon className="h-5 w-5" />;
   }
 };
 
-export const getStepColor = (
-  status: RestoreStep['status']
-): 'success' | 'error' | 'warning' | 'primary' | 'default' => {
+export const getStepStyles = (status: RestoreStep['status']) => {
   switch (status) {
     case 'completed':
-      return 'success';
+      return {
+        icon: "bg-emerald-500/10 text-emerald-400",
+        text: "text-foreground",
+        container: ""
+      };
     case 'error':
-      return 'error';
+      return {
+        icon: "bg-destructive/10 text-destructive",
+        text: "text-destructive",
+        container: ""
+      };
     case 'warning':
-      return 'warning';
+      return {
+        icon: "bg-yellow-500/10 text-yellow-500",
+        text: "text-yellow-500",
+        container: ""
+      };
     case 'in-progress':
-      return 'primary';
+      return {
+        icon: "bg-primary/10 text-primary",
+        text: "text-primary",
+        container: "bg-muted/30 border-primary/20 shadow-inner"
+      };
     case 'pending':
     default:
-      return 'default';
+      return {
+        icon: "bg-muted/20 text-muted-foreground",
+        text: "text-muted-foreground",
+        container: "opacity-40 grayscale"
+      };
   }
 };
 

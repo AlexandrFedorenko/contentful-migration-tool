@@ -1,8 +1,8 @@
 import React from 'react';
-import { Typography, List, ListItem, ListItemIcon, ListItemText, Box, Chip } from '@mui/material';
 import { RestoreStep } from './types';
-import { getStepIcon, getStepColor } from '@/utils/restore-progress-utils';
-import styles from './RestoreProgressModal.module.css';
+import { getStepIcon, getStepStyles } from '@/utils/restore-progress-utils';
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface StepsListProps {
   steps: RestoreStep[];
@@ -10,47 +10,56 @@ interface StepsListProps {
 
 const StepsList = React.memo<StepsListProps>(({ steps }) => {
   return (
-    <>
-      <Typography variant="subtitle2" className={styles.stepsTitle}>
-        Restore Steps:
-      </Typography>
-      <List dense>
-        {steps.map((step, index) => (
-          <ListItem 
-            key={index} 
-            className={styles.stepItem}
-            style={{ opacity: step.status === 'pending' ? 0.6 : 1 }}
-          >
-            <ListItemIcon className={styles.stepIcon}>
-              {getStepIcon(step.status)}
-            </ListItemIcon>
-            <ListItemText 
-              primary={
-                <Box className={styles.stepPrimary}>
-                  <Typography variant="body2">
+    <div className="space-y-4">
+      <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60 px-1">
+        Execution Log
+      </h4>
+      <div className="space-y-2">
+        {steps.map((step, index) => {
+          const styles = getStepStyles(step.status);
+
+          return (
+            <div
+              key={index}
+              className={cn(
+                "flex items-start gap-4 p-3 rounded-lg border transition-all bg-transparent border-transparent",
+                styles.container
+              )}
+            >
+              <div className={cn(
+                "p-2 rounded-lg mt-0.5 font-extrabold uppercase tracking-tighter",
+                styles.icon
+              )}>
+                {getStepIcon(step.status)}
+              </div>
+              <div className="flex-1 min-w-0 py-0.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={cn(
+                    "text-sm font-bold tracking-tight",
+                    styles.text
+                  )}>
                     {step.name}
-                  </Typography>
+                  </p>
                   {step.duration && (
-                    <Chip 
-                      label={step.duration}
-                      size="small"
-                      variant="outlined"
-                      color={getStepColor(step.status)}
-                    />
+                    <Badge variant="outline" className="h-5 px-2 text-[9px] font-mono bg-muted/30 border-border/50 opacity-60">
+                      {step.duration}
+                    </Badge>
                   )}
-                </Box>
-              }
-              secondary={step.message}
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-          </ListItem>
-        ))}
-      </List>
-    </>
+                </div>
+                {step.message && (
+                  <p className="text-[11px] text-muted-foreground/60 mt-0.5 leading-relaxed truncate group-hover:whitespace-normal group-hover:overflow-visible italic">
+                    {step.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 });
 
 StepsList.displayName = 'StepsList';
 
 export default StepsList;
-

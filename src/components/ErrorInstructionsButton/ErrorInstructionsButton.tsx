@@ -1,7 +1,12 @@
 import React from 'react';
-import { Button, Tooltip } from '@mui/material';
-import { Error as ErrorIcon } from '@mui/icons-material';
-import styles from './ErrorInstructionsButton.module.css';
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { AlertCircle as ErrorIcon } from 'lucide-react';
 
 interface ErrorInstructionsButtonProps {
   instruction: unknown;
@@ -17,28 +22,28 @@ const ErrorInstructionsButton = React.memo<ErrorInstructionsButtonProps>(({
   if (!instruction) return null;
 
   return (
-    <Tooltip title="Click to view error details" arrow>
-      <Button
-        variant="outlined"
-        color="error"
-        startIcon={<ErrorIcon />}
-        onClick={onClick}
-        disabled={disabled}
-        size="small"
-        className={styles.button}
-        sx={{
-          borderWidth: 2,
-          '&:hover': {
-            borderWidth: 2,
-          }
-        }}
-      >
-        Error Details
-      </Button>
-    </Tooltip>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive border-2 font-bold transition-all h-8 px-3"
+          >
+            <ErrorIcon className="h-4 w-4 mr-2" />
+            Error Details
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="bg-destructive text-white font-bold text-[10px] uppercase tracking-widest border-none shadow-lg">
+          Click to view error details
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 });
 
 ErrorInstructionsButton.displayName = 'ErrorInstructionsButton';
 
-export default ErrorInstructionsButton; 
+export default ErrorInstructionsButton;

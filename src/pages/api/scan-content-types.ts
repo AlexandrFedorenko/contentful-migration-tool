@@ -1,5 +1,8 @@
+import { getAuth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { ContentfulManagement } from "@/utils/contentful-management";
+import { ContentfulManagement, Entry } from "@/utils/contentful-management";
 
 interface ScanRequest {
     spaceId: string;
@@ -20,7 +23,7 @@ interface ScanResultItem {
 
 interface ScanResponse {
     success: boolean;
-    items?: ScanResultItem[];
+    data?: ScanResultItem[];
     error?: string;
 }
 
@@ -30,6 +33,11 @@ export default async function handler(
 ) {
     if (req.method !== 'POST') {
         return res.status(405).json({ success: false, error: 'Method not allowed' });
+    }
+
+    const { userId } = getAuth(req);
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
     try {
@@ -42,11 +50,26 @@ export default async function handler(
             });
         }
 
+        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+        if (!user || !user.contentfulToken) {
+            return res.status(401).json({ success: false, error: 'Contentful token not set in profile' });
+        }
 
-        const sourceIterator = ContentfulManagement.getEntriesIterator(spaceId, sourceEnvironment);
-        const targetEntriesMap = new Map<string, any>();
+        const token = decrypt(user.contentfulToken);
 
-        const targetIterator = ContentfulManagement.getEntriesIterator(spaceId, targetEnvironment);
+
+        const sourceIterator = ContentfulManagement.getEntriesIterator(
+            spaceId,
+            sourceEnvironment,
+            token
+        );
+        const targetEntriesMap = new Map<string, Entry>();
+
+        const targetIterator = ContentfulManagement.getEntriesIterator(
+            spaceId,
+            targetEnvironment,
+            token
+        );
 
         for await (const batch of targetIterator) {
             for (const entry of batch) {
@@ -93,7 +116,7 @@ export default async function handler(
 
         return res.status(200).json({
             success: true,
-            items: results
+            data: results
         });
 
     } catch (error) {
@@ -105,17 +128,17 @@ export default async function handler(
     }
 }
 
-function getEntryTitle(entry: any): string {
+function getEntryTitle(entry: Entry): string {
     if (entry.fields?.title) {
         // Handle localized title
         const titleVal = entry.fields.title;
         if (typeof titleVal === 'string') return titleVal;
-        if (typeof titleVal === 'object') return Object.values(titleVal)[0] as string || 'Untitled';
+        if (typeof titleVal === 'object' && titleVal !== null) return Object.values(titleVal)[0] as string || 'Untitled';
     }
     if (entry.fields?.name) {
         const nameVal = entry.fields.name;
         if (typeof nameVal === 'string') return nameVal;
-        if (typeof nameVal === 'object') return Object.values(nameVal)[0] as string || 'Untitled';
+        if (typeof nameVal === 'object' && nameVal !== null) return Object.values(nameVal)[0] as string || 'Untitled';
     }
     return entry.sys.id;
 }

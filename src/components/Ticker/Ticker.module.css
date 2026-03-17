@@ -1,0 +1,22 @@
+.track {
+    display: flex;
+    width: fit-content;
+    animation: ticker-loop 25s linear infinite;
+    will-change: transform;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    min-width: 100vw;
+}
+
+@keyframes ticker-loop {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}

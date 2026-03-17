@@ -1,7 +1,6 @@
 import React from 'react';
-import { DialogActions as MuiDialogActions, Button } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
-import styles from './RestoreProgressModal.module.css';
+import { Button } from "@/components/ui/button";
+import { X as CloseIcon } from 'lucide-react';
 
 interface DialogActionsProps {
   onClose?: () => void;
@@ -11,19 +10,18 @@ const DialogActions = React.memo<DialogActionsProps>(({ onClose }) => {
   if (!onClose) return null;
 
   return (
-    <MuiDialogActions className={styles.dialogActions}>
-      <Button 
-        onClick={onClose} 
-        variant="contained"
-        startIcon={<CloseIcon />}
+    <div className="flex justify-end gap-3">
+      <Button
+        onClick={onClose}
+        className="bg-primary hover:bg-primary/90 text-white font-bold px-10 shadow-lg shadow-primary/20 uppercase tracking-widest text-[10px]"
       >
-        Close
+        <CloseIcon className="h-3 w-3 mr-2" />
+        Terminate Modal
       </Button>
-    </MuiDialogActions>
+    </div>
   );
 });
 
 DialogActions.displayName = 'DialogActions';
 
 export default DialogActions;
-

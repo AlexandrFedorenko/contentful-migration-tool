@@ -1,553 +1,528 @@
-import React, { useState, useEffect } from 'react';
-import Head from 'next/head';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import {
-    Box,
-    Container,
-    Typography,
-    Paper,
-    Grid,
-    Button,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    CircularProgress,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    TextField,
-    InputAdornment,
-    Checkbox,
-    ListItemText
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import { useSpaces } from '@/hooks/useSpaces';
-import { useEnvironments } from '@/hooks/useEnvironments';
-import ScanResultsList from '@/components/SmartMigration/ScanResultsList';
-import DiffViewer from '@/components/SmartMigration/DiffViewer';
+    ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send,
+    Layers, Globe, Settings2, RefreshCw, Zap,
+    Info, GitMerge, Network,
+    Search, Filter,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import SpaceSelector from '@/components/SpaceSelector/SpaceSelector';
+import EnvironmentSelector from '@/components/EnvironmentSelector/EnvironmentSelector';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { useAuth } from '@/context/AuthContext';
+import { useEnvironments } from '@/hooks/useEnvironments';
+import { useSpaces } from '@/hooks/useSpaces';
+import { useSmartMigrate } from '@/hooks/useSmartMigrate';
+import { MigrateCTRow, MigrateLocaleRow } from '@/components/SmartMigrate/SmartMigrateComponents';
+import { LocaleRemapModal } from '@/components/LocaleRemapModal/LocaleRemapModal';
+import { PageHelp } from '@/components/PageHelp/PageHelp';
+import { TabIndex } from '@/hooks/useDocumentationTabs';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select";
 
 export default function SmartMigrationPage() {
     const router = useRouter();
-    const { isLoggedIn } = useAuth();
     const { state } = useGlobalContext();
-    const { spaces, loading: spacesLoading } = useSpaces();
-    const [selectedSpace, setSelectedSpace] = useState('');
-    const [sourceEnv, setSourceEnv] = useState('');
-    const [targetEnv, setTargetEnv] = useState('');
-
     const { loadEnvironments } = useEnvironments();
-    const environments = state.donorEnvironments;
-    const envsLoading = state.loading.loadingEnvironments;
+    const { spaces } = useSpaces();
+    const sm = useSmartMigrate();
 
-    // Scan Results State
-    const [scanResults, setScanResults] = useState<any[]>([]);
-    const [filteredResults, setFilteredResults] = useState<any[]>([]);
-    const [sourceBackupFile, setSourceBackupFile] = useState<string | null>(null);
+    const [targetEnvList, setTargetEnvList] = useState<{ id: string; name: string }[]>([]);
+    const [localeRemapOpen, setLocaleRemapOpen] = useState(false);
+    const [ctSearch, setCTSearch] = useState('');
+    const [entrySearch, setEntrySearch] = useState('');
+    const [showFilter, setShowFilter] = useState<'changed' | 'all'>('changed');
 
-    // Filters
-    const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string[]>(['NEW', 'MODIFIED', 'DELETED']);
-    const [contentTypeFilter, setContentTypeFilter] = useState<string[]>([]);
-    const [localeFilter, setLocaleFilter] = useState<string[]>([]);
-    const [availableLocales, setAvailableLocales] = useState<string[]>([]);
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-
-    // Process States
-    const [isScanning, setIsScanning] = useState(false);
-    const [isMigrating, setIsMigrating] = useState(false);
-    const [statusMessage, setStatusMessage] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [hasScanned, setHasScanned] = useState(false);
-
-    // Diff Viewer State
-    const [diffData, setDiffData] = useState<{ oldValue: any, newValue: any } | null>(null);
-    const [selectedDiffItem, setSelectedDiffItem] = useState<any>(null);
-    const [sourceAssets, setSourceAssets] = useState<any[]>([]);
-    const [targetAssets, setTargetAssets] = useState<any[]>([]);
-    const [sourceEntries, setSourceEntries] = useState<any[]>([]);
-    const [targetEntries, setTargetEntries] = useState<any[]>([]);
-
-    // Dialogs
-    const [successDialogOpen, setSuccessDialogOpen] = useState(false);
-    const [successData, setSuccessData] = useState<{ deltaBackup: string } | null>(null);
-    const [errorDialogOpen, setErrorDialogOpen] = useState(false);
-    const [errorDialogMessage, setErrorDialogMessage] = useState('');
-
-    // Check authentication and redirect if not logged in
     useEffect(() => {
-        if (!isLoggedIn) {
-            router.push('/');
+        if (state.spaceId) {
+            sm.setSourceSpaceId(state.spaceId);
+            sm.setTargetSpaceId(state.spaceId);
+            loadEnvironments(state.spaceId);
         }
-    }, [isLoggedIn, router]);
+    }, [state.spaceId, loadEnvironments]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Load environments when space is selected
     useEffect(() => {
-        if (selectedSpace) {
-            loadEnvironments(selectedSpace);
+        if (!sm.targetSpaceId) return;
+        fetch(`/api/environments?spaceId=${sm.targetSpaceId}`)
+            .then(r => r.json())
+            .then(j => setTargetEnvList(j.data?.environments ?? []))
+            .catch(() => { });
+    }, [sm.targetSpaceId]);
+
+    const handleLoadDiff = () => {
+        if (sm.sourceSpaceId && sm.sourceEnvironmentId && sm.targetSpaceId && sm.targetEnvironmentId) {
+            sm.loadDiff(sm.sourceSpaceId, sm.sourceEnvironmentId, sm.targetSpaceId, sm.targetEnvironmentId);
         }
-    }, [selectedSpace, loadEnvironments]);
-
-    // Filter Logic
-    useEffect(() => {
-        let res = scanResults;
-
-        if (searchTerm) {
-            const lower = searchTerm.toLowerCase();
-            res = res.filter(item =>
-                item.title.toLowerCase().includes(lower) ||
-                item.id.toLowerCase().includes(lower) ||
-                item.contentTypeId.toLowerCase().includes(lower)
-            );
-        }
-
-        if (statusFilter.length > 0) {
-            res = res.filter(item => statusFilter.includes(item.status));
-        }
-
-        if (contentTypeFilter.length > 0) {
-            res = res.filter(item => contentTypeFilter.includes(item.contentTypeId));
-        }
-
-        setFilteredResults(res);
-    }, [scanResults, searchTerm, statusFilter, contentTypeFilter]);
-
-    const handleToggleSelect = (id: string) => {
-        const newSet = new Set(selectedItems);
-        if (newSet.has(id)) {
-            newSet.delete(id);
-        } else {
-            newSet.add(id);
-        }
-        setSelectedItems(newSet);
     };
 
-    const handleItemClick = (item: any) => {
-        setSelectedDiffItem(item);
-        setDiffData({
-            oldValue: item.oldValue,
-            newValue: item.newValue
-        });
-    };
+    const canLoadDiff = !!(sm.sourceSpaceId && sm.sourceEnvironmentId && sm.targetSpaceId && sm.targetEnvironmentId);
+    const summary = sm.diff?.summary;
 
-    const handleScan = async () => {
-        setIsScanning(true);
-        setError(null);
-        setHasScanned(false);
-        setStatusMessage('Backing up environments...');
-        setScanResults([]);
+    const filteredCTs = useMemo(() => {
+        if (!sm.diff) return [];
+        let cts = sm.diff.contentTypes;
+        if (showFilter === 'changed') {
+            cts = cts.filter(ct => {
+                if (ct.diffStatus !== 'EQUAL') return true;
+                if (ct.totalSourceEntries !== ct.totalTargetEntries) return true;
+                if (sm.loadingEntries.has(ct.id)) return true;
 
-        try {
-            // 1. Trigger Smart Scan (Backups)
-            const scanResponse = await fetch('/api/smart-scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    spaceId: selectedSpace,
-                    sourceEnv,
-                    targetEnv
-                })
+                // Keep visible if it has entries but hasn't been analyzed yet
+                if (!sm.analyzedCTs.has(ct.id) && (ct.totalSourceEntries > 0 || ct.totalTargetEntries > 0)) {
+                    return true;
+                }
+
+                const loadedEntries = sm.entriesMap[ct.id]?.entries;
+                if (loadedEntries) {
+                    return loadedEntries.some(e => e.diffStatus !== 'EQUAL');
+                }
+
+                return false;
             });
-            const scanData = await scanResponse.json();
-
-            if (!scanData.success) {
-                throw new Error(scanData.error || 'Scan failed');
-            }
-
-            setSourceBackupFile(scanData.sourceBackup);
-            setStatusMessage('Comparing backups...');
-
-            // 2. Compare Backups
-            const compareResponse = await fetch('/api/compare-backups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    spaceId: selectedSpace,
-                    sourceBackup: scanData.sourceBackup,
-                    targetBackup: scanData.targetBackup
-                })
-            });
-            const compareData = await compareResponse.json();
-
-            if (compareData.success) {
-                const results = compareData.diffs || [];
-                setScanResults(results);
-                setFilteredResults(results);
-
-                // Extract content types for filter
-                const types = Array.from(new Set(results.map((r: any) => r.contentTypeId))) as string[];
-                setContentTypeFilter(types);
-
-                // Extract locales from source backup
-                const locales = compareData.sourceLocales || [];
-                setAvailableLocales(locales);
-                setLocaleFilter(locales); // Select all by default
-
-                setSourceAssets(compareData.sourceAssets || []);
-                setTargetAssets(compareData.targetAssets || []);
-                setSourceEntries(compareData.sourceEntries || []);
-                setTargetEntries(compareData.targetEntries || []);
-
-                setHasScanned(true);
-                setStatusMessage('');
-            } else {
-                throw new Error(compareData.error || 'Comparison failed');
-            }
-
-        } catch (error) {
-            console.error('Scan failed', error);
-            setError(error instanceof Error ? error.message : 'Unknown error');
-        } finally {
-            setIsScanning(false);
         }
-    };
-
-    const handleMigrate = async () => {
-        if (selectedItems.size === 0) {
-            alert('Please select items to migrate.');
-            return;
+        if (ctSearch) {
+            const q = ctSearch.toLowerCase();
+            cts = cts.filter(ct => ct.name.toLowerCase().includes(q) || ct.id.toLowerCase().includes(q));
         }
-        if (!sourceBackupFile) {
-            alert('Source backup file is missing. Please scan again.');
-            return;
-        }
-
-        setIsMigrating(true);
-        setStatusMessage('Migrating selected items...');
-
-        try {
-            const response = await fetch('/api/smart-migrate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    spaceId: selectedSpace,
-                    targetEnv,
-                    sourceBackup: sourceBackupFile,
-                    selectedItems: Array.from(selectedItems),
-                    selectedLocales: localeFilter
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setStatusMessage('Migration successful!');
-                setSuccessData({ deltaBackup: data.deltaBackup || 'Migration Complete' });
-                setSuccessDialogOpen(true);
-            } else {
-                throw new Error(data.error || 'Migration failed');
-            }
-        } catch (error) {
-            console.error('Migration failed', error);
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            setStatusMessage(`Migration failed: ${errorMsg}`);
-            setErrorDialogMessage(errorMsg);
-            setErrorDialogOpen(true);
-        } finally {
-            setIsMigrating(false);
-        }
-    };
+        return cts;
+    }, [sm.diff, showFilter, ctSearch, sm.entriesMap, sm.loadingEntries, sm.analyzedCTs]);
 
     return (
-        <>
-            <Head>
-                <title>Smart Migration | Contentful Tool</title>
-            </Head>
+        <div className="max-w-7xl mx-auto py-8 px-6 space-y-8">
+            {/* Header */}
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')} className="hover:bg-muted group">
+                    <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                    Back
+                </Button>
+                <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
+                            <GitMerge className="h-7 w-7 text-primary" />
+                            Smart Migrate
+                        </h1>
+                        <PageHelp
+                            description="Real-time diff between environments — selectively migrate CTs, entries and locales"
+                            docTab={TabIndex.SMART_MIGRATE}
+                        />
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Real-time diff between environments — selectively migrate CTs, entries and locales
+                    </p>
+                </div>
+            </div>
 
-            {!isLoggedIn ? (
-                <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-                    <CircularProgress />
-                </Box>
-            ) : (
-                <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-                    <Container maxWidth="xl" sx={{ py: 4 }}>
-                        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 4 }}>
-                            Smart Migration
-                        </Typography>
+            <div className="space-y-6">
+                {/* 1. Environment selection */}
+                <Card className="border-primary/10 bg-card/30 backdrop-blur-sm">
+                    <CardHeader className="pb-3 border-b border-border/50">
+                        <CardTitle className="text-base font-black uppercase tracking-widest flex items-center gap-2">
+                            <Network className="h-4 w-4 text-primary" />
+                            Environments
+                        </CardTitle>
+                        <CardDescription className="text-base">Select source and target environments to compare</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-base font-black uppercase tracking-widest text-primary flex items-center gap-1">
+                                <Network className="h-3.5 w-3.5" /> Source (from)
+                            </Label>
+                            <SpaceSelector />
+                            {state.spaceId && (
+                                <EnvironmentSelector
+                                    environments={state.donorEnvironments ?? []}
+                                    value={sm.sourceEnvironmentId}
+                                    onChange={(v) => sm.setSourceEnvironmentId(v)}
+                                    label="Source Environment"
+                                />
+                            )}
+                        </div>
 
-                        <Paper sx={{ p: 3, mb: 4 }}>
-                            <Grid container spacing={3} alignItems="center">
-                                <Grid item xs={12} md={3}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Space</InputLabel>
-                                        <Select
-                                            value={selectedSpace}
-                                            label="Space"
-                                            onChange={(e) => setSelectedSpace(e.target.value)}
-                                            disabled={spacesLoading}
+                        <Separator className="bg-border/50" />
+
+                        <div className="space-y-2">
+                            <Label className="text-base font-black uppercase tracking-widest text-amber-400 flex items-center gap-1">
+                                Target (to)
+                            </Label>
+                            <Select
+                                value={sm.targetSpaceId || "NO_SELECTION_PLACEHOLDER"}
+                                onValueChange={(v) => {
+                                    if (v !== "NO_SELECTION_PLACEHOLDER") {
+                                        sm.setTargetSpaceId(v);
+                                        sm.setTargetEnvironmentId('');
+                                    }
+                                }}
+                            >
+                                <SelectTrigger className="w-full bg-background/50 text-base h-11">
+                                    <SelectValue placeholder="Select target space..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="NO_SELECTION_PLACEHOLDER" disabled className="text-muted-foreground italic">
+                                        Select target space...
+                                    </SelectItem>
+                                    {spaces.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.name} <span className="text-[10px] opacity-50 ml-1">({s.id})</span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {sm.targetSpaceId && (
+                                <EnvironmentSelector
+                                    environments={targetEnvList}
+                                    value={sm.targetEnvironmentId}
+                                    onChange={sm.setTargetEnvironmentId}
+                                    label="Target Environment"
+                                />
+                            )}
+                        </div>
+
+                        <Button
+                            onClick={handleLoadDiff}
+                            disabled={!canLoadDiff || sm.isLoading}
+                            className="w-full h-14 text-lg font-extrabold bg-primary/90 hover:bg-primary"
+                        >
+                            {sm.status === 'loading-diff' ? (
+                                <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Comparing environments...</>
+                            ) : (
+                                <><RefreshCw className="mr-2 h-5 w-5" />Load Live Diff</>
+                            )}
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Diff preview */}
+                {sm.diff && (
+                    <Card className="border-white/5 bg-card/20 backdrop-blur-sm">
+                        <CardHeader className="pb-3 border-b border-border/50">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base font-black uppercase tracking-widest flex items-center gap-2">
+                                    <Layers className="h-4 w-4 text-emerald-400" />
+                                    Diff Preview
+                                </CardTitle>
+                                {summary && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        {(summary.newEntries > 0 || summary.newCTs > 0) && (
+                                            <span className="text-base font-black px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                +{summary.newEntries} entries {summary.newCTs > 0 && `· +${summary.newCTs} CT`}
+                                            </span>
+                                        )}
+                                        {(summary.modifiedEntries > 0 || summary.modifiedCTs > 0) && (
+                                            <span className="text-base font-black px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                                ~{summary.modifiedEntries} entries {summary.modifiedCTs > 0 && `· ~${summary.modifiedCTs} CT`}
+                                            </span>
+                                        )}
+                                        {summary.deletedEntries > 0 && (
+                                            <span className="text-base font-black px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                                -{summary.deletedEntries}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            <div className="flex flex-col gap-6">
+                                {/* Locales */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <Label className="text-base font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                                            <Globe className="h-3.5 w-3.5" /> Locales
+                                        </Label>
+                                        <div className="flex gap-4">
+                                            <button onClick={sm.selectChangedLocales} className="text-base text-primary font-bold hover:underline">
+                                                Changes only
+                                            </button>
+                                            <button
+                                                onClick={() => setLocaleRemapOpen(true)}
+                                                className="flex items-center gap-1.5 text-base text-primary font-bold hover:underline"
+                                            >
+                                                <Settings2 className="h-3.5 w-3.5" />
+                                                Remap
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {Object.keys(sm.localeMapping).length > 0 && (
+                                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10 text-base text-primary font-bold">
+                                            <Globe className="h-3.5 w-3.5 shrink-0" />
+                                            {Object.entries(sm.localeMapping).map(([src, tgt]) => `${src}→${tgt}`).join(', ')}
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                        {sm.diff.locales.map((locale) => (
+                                            <MigrateLocaleRow
+                                                key={locale.code}
+                                                locale={locale}
+                                                checked={sm.selectedLocales.has(locale.code)}
+                                                remappedTo={sm.localeMapping[locale.code]}
+                                                onToggle={sm.toggleLocale}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Separator className="bg-border/50" />
+
+                                {/* Content Types + Entries */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-base font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                                            <Layers className="h-3.5 w-3.5" /> Content Types & Entries
+                                        </Label>
+                                        <div className="flex gap-3 text-base">
+                                            <button onClick={sm.selectAllChanged} className="text-primary font-bold hover:underline">All changes</button>
+                                            <span className="text-muted-foreground/30">·</span>
+                                            <button onClick={sm.selectAllCTs} className="text-primary font-bold hover:underline">All</button>
+                                            <span className="text-muted-foreground/30">·</span>
+                                            <button onClick={sm.clearAllCTs} className="text-muted-foreground font-bold hover:underline">None</button>
+                                        </div>
+                                    </div>
+
+                                    {/* Search + Filter bar */}
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
+                                            <input
+                                                type="text"
+                                                value={ctSearch}
+                                                onChange={(e) => setCTSearch(e.target.value)}
+                                                placeholder="Search content types..."
+                                                className="w-full pl-9 pr-3 py-2 text-base rounded-lg border border-border/50 bg-card/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                            />
+                                        </div>
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
+                                            <input
+                                                type="text"
+                                                value={entrySearch}
+                                                onChange={(e) => setEntrySearch(e.target.value)}
+                                                placeholder="Search entries..."
+                                                className="w-full pl-9 pr-3 py-2 text-base rounded-lg border border-border/50 bg-card/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => setShowFilter(f => f === 'changed' ? 'all' : 'changed')}
+                                            className={`flex items-center gap-1 px-3 py-2 rounded-lg border text-base font-bold uppercase tracking-wider transition-all ${showFilter === 'changed'
+                                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                                                : 'border-border/50 bg-muted/20 text-muted-foreground'
+                                                }`}
                                         >
-                                            {spaces?.map((space) => (
-                                                <MenuItem key={space.id} value={space.id}>
-                                                    {space.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+                                            <Filter className="h-4 w-4" />
+                                            {showFilter === 'changed' ? 'Changed' : 'All'}
+                                        </button>
+                                    </div>
 
-                                <Grid item xs={12} md={3}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Source Environment</InputLabel>
-                                        <Select
-                                            value={sourceEnv}
-                                            label="Source Environment"
-                                            onChange={(e) => setSourceEnv(e.target.value)}
-                                            disabled={!selectedSpace || envsLoading}
-                                        >
-                                            {environments?.map((env: any) => (
-                                                <MenuItem
-                                                    key={env.id}
-                                                    value={env.id}
-                                                    disabled={env.id === targetEnv}
-                                                >
-                                                    {env.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+                                    {/* CT list */}
+                                    <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                                        {filteredCTs.map((ct) => (
+                                            <MigrateCTRow
+                                                key={ct.id}
+                                                ct={ct}
+                                                checked={sm.selectedCTIds.has(ct.id)}
+                                                isAutoDep={sm.autoDeps.has(ct.id) && !sm.selectedCTIds.has(ct.id)}
+                                                onToggle={sm.toggleCT}
+                                                entriesData={sm.entriesMap[ct.id]}
+                                                isLoadingEntries={sm.loadingEntries.has(ct.id)}
+                                                onLoadEntries={sm.loadEntries}
+                                                selectedEntryIds={sm.selectedEntryIds}
+                                                onToggleEntry={sm.toggleEntry}
+                                                onSelectAllEntries={sm.selectAllEntriesForCT}
+                                                onClearEntries={sm.clearEntriesForCT}
+                                                entrySearch={entrySearch}
+                                                hideUnchanged={showFilter === 'changed'}
+                                            />
+                                        ))}
+                                        {filteredCTs.length === 0 && (
+                                            <div className="text-center py-8 text-base text-muted-foreground/40">
+                                                {showFilter === 'changed'
+                                                    ? 'No changes detected between environments'
+                                                    : 'No content types match your search'
+                                                }
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
-                                <Grid item xs={12} md={3}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Target Environment</InputLabel>
-                                        <Select
-                                            value={targetEnv}
-                                            label="Target Environment"
-                                            onChange={(e) => setTargetEnv(e.target.value)}
-                                            disabled={!selectedSpace || envsLoading}
-                                        >
-                                            {environments?.map((env) => (
-                                                <MenuItem
-                                                    key={env.id}
-                                                    value={env.id}
-                                                    disabled={env.id === sourceEnv}
-                                                >
-                                                    {env.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+                {/* 3. Action panel (Migration) */}
+                {sm.isReady || sm.isDone || sm.status === 'running' ? (
+                    sm.diff && sm.hasSelection ? (
+                        <>
+                            <Card className="border-primary/10 bg-card/30 backdrop-blur-sm">
+                                <CardHeader className="pb-3 border-b border-border/50">
+                                    <CardTitle className="text-base font-black uppercase tracking-widest flex items-center gap-2">
+                                        <Send className="h-4 w-4 text-primary" />
+                                        Migration
+                                    </CardTitle>
+                                    <CardDescription className="text-base">
+                                        {sm.selectedCTIds.size} CT{sm.selectedCTIds.size !== 1 ? 's' : ''}
+                                        {' · '}{sm.selectedEntryCount} entr{sm.selectedEntryCount !== 1 ? 'ies' : 'y'}
+                                        {sm.selectedLocales.size > 0 ? ` · ${sm.selectedLocales.size} locale${sm.selectedLocales.size !== 1 ? 's' : ''}` : ' · all locales'}
+                                        {' '}selected
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-4 space-y-4">
+                                    <div className="space-y-3">
+                                        <Label className="text-base font-black uppercase tracking-widest text-muted-foreground block">Options</Label>
 
-                                <Grid item xs={12} md={12}>
+                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/50">
+                                            <Checkbox
+                                                id="include-assets"
+                                                checked={sm.options.includeAssets}
+                                                onCheckedChange={(v) => sm.setOptions(o => ({ ...o, includeAssets: !!v }))}
+                                                className="mt-0.5 h-5 w-5"
+                                            />
+                                            <div>
+                                                <Label htmlFor="include-assets" className="text-base font-bold cursor-pointer">Include assets</Label>
+                                                <p className="text-base text-muted-foreground">Transfer asset metadata to target via CMA</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5">
+                                            <div className="flex-1">
+                                                <Label className="text-base font-bold">Merge Mode</Label>
+                                                <p className="text-base text-muted-foreground">How to handle existing entries in target</p>
+                                            </div>
+                                            <select
+                                                className="text-base rounded-lg border border-border/50 bg-card/50 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                                value={sm.options.mergeMode}
+                                                onChange={(e) => sm.setOptions(o => ({ ...o, mergeMode: e.target.value as 'upsert' | 'skip-existing' }))}
+                                            >
+                                                <option value="upsert">Upsert (update existing)</option>
+                                                <option value="skip-existing">Skip existing</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
                                     <Button
-                                        variant="contained"
-                                        fullWidth
-                                        size="large"
-                                        onClick={handleScan}
-                                        disabled={!selectedSpace || !sourceEnv || !targetEnv || isScanning}
+                                        onClick={sm.executeMigration}
+                                        disabled={!sm.targetSpaceId || !sm.targetEnvironmentId || sm.isLoading}
+                                        className="w-full h-14 text-lg font-extrabold bg-gradient-to-r from-primary to-indigo-600 hover:opacity-90"
                                     >
-                                        {isScanning ? (
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                                <CircularProgress size={24} color="inherit" />
-                                                <Typography>{statusMessage}</Typography>
-                                            </Box>
-                                        ) : 'Scan Differences'}
+                                        {sm.isLoading ? (
+                                            <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Migrating...</>
+                                        ) : (
+                                            <><Zap className="mr-2 h-5 w-5" />Execute Migration</>
+                                        )}
                                     </Button>
-                                </Grid>
-                            </Grid>
-                        </Paper>
 
-                        {error && (
-                            <Alert severity="error" sx={{ mb: 4 }}>
-                                {error}
+                                    {!sm.isLoading && !sm.isDone && (
+                                        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/10 text-base text-amber-400">
+                                            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                                            <span>A safety backup of the target env will be created automatically before any write.</span>
+                                        </div>
+                                    )}
+
+                                    {/* Live log console */}
+                                    {(sm.isLoading || sm.logs.length > 0) && (
+                                        <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden mt-6">
+                                            <div className="flex items-center gap-3 px-5 py-4 border-b border-border/50 bg-muted/20">
+                                                <div className="h-3 w-3 rounded-full bg-emerald-400 animate-pulse" />
+                                                <span className="text-base font-black uppercase tracking-widest text-muted-foreground">Migration Log</span>
+                                                <span className="ml-auto text-base text-muted-foreground/50 font-mono">{sm.logs.length} lines</span>
+                                            </div>
+                                            <div className="p-5 max-h-80 overflow-y-auto font-mono text-base space-y-1 text-emerald-300/90">
+                                                {sm.logs.length === 0 && (
+                                                    <div className="text-muted-foreground/40 animate-pulse">Waiting for response...</div>
+                                                )}
+                                                {sm.logs.map((line, i) => (
+                                                    <div key={i} className={`leading-relaxed ${line.startsWith('❌') ? 'text-red-400'
+                                                        : line.startsWith('⚠️') ? 'text-amber-400'
+                                                            : line.startsWith('✅') ? 'text-emerald-400'
+                                                                : 'text-emerald-300/70'
+                                                        }`}>
+                                                        {line}
+                                                    </div>
+                                                ))}
+                                                {sm.isLoading && <div className="text-muted-foreground/40 animate-pulse mt-2">▌</div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {sm.isDone && sm.resultStats && (
+                                <Card className="border-emerald-500/20 bg-emerald-500/5">
+                                    <CardContent className="pt-4 space-y-2">
+                                        <div className="flex items-center gap-2 text-emerald-400 font-bold text-lg">
+                                            <CheckCircle2 className="h-5 w-5" />
+                                            Migration Complete
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-base text-muted-foreground">
+                                            <span>Content Types: <strong className="text-foreground">{sm.resultStats.contentTypes}</strong></span>
+                                            <span>Entries OK: <strong className="text-foreground">{sm.resultStats.entries.success}</strong></span>
+                                            <span>Assets: <strong className="text-foreground">{sm.resultStats.assets}</strong></span>
+                                            {sm.resultStats.entries.failed > 0 && (
+                                                <span className="text-amber-400">Failed: {sm.resultStats.entries.failed}</span>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {sm.status === 'error' && sm.error && (
+                                <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription className="text-base">{sm.error}</AlertDescription>
+                                </Alert>
+                            )}
+                        </>
+                    ) : sm.diff && !sm.hasSelection ? (
+                        <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-border/50 rounded-xl space-y-3">
+                            <Layers className="h-10 w-10 text-muted-foreground/30" />
+                            <p className="text-base text-muted-foreground">Select at least one Content Type to continue</p>
+                            <Button variant="outline" size="sm" onClick={sm.selectAllChanged} className="text-base">Select all changes</Button>
+                        </div>
+                    ) : null
+                ) : (
+                    <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-border/50 rounded-xl space-y-4">
+                        <div className="relative">
+                            <div className="absolute inset-0 blur-3xl bg-primary/10 rounded-full" />
+                            <div className="relative h-16 w-16 rounded-2xl border border-border/50 bg-muted/30 flex items-center justify-center">
+                                <GitMerge className="h-8 w-8 text-primary" />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-base font-bold text-foreground">No diff loaded yet</p>
+                            <p className="text-base text-muted-foreground">
+                                Select source + target environments and click <strong>Load Live Diff</strong>
+                            </p>
+                        </div>
+                        {sm.status === 'error' && sm.error && (
+                            <Alert variant="destructive" className="text-left max-w-sm">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription className="text-base">{sm.error}</AlertDescription>
                             </Alert>
                         )}
+                    </div>
+                )}
+            </div>
 
-                        <Paper sx={{ p: 4, minHeight: 400 }}>
-                            {scanResults.length > 0 ? (
-                                <Box>
-                                    <Typography variant="h6" gutterBottom>
-                                        Scan Results ({filteredResults.length} / {scanResults.length} items)
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', minHeight: 800, maxHeight: 900 }}>
-                                        {/* Left Panel */}
-                                        <Box sx={{ flex: '0 0 41.666%', display: 'flex', flexDirection: 'column' }}>
-                                            <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                                <TextField
-                                                    fullWidth
-                                                    size="small"
-                                                    placeholder="Search..."
-                                                    value={searchTerm}
-                                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                                    InputProps={{
-                                                        startAdornment: (
-                                                            <InputAdornment position="start">
-                                                                <SearchIcon color="action" />
-                                                            </InputAdornment>
-                                                        ),
-                                                    }}
-                                                />
-                                                <Box sx={{ display: 'flex', gap: 2 }}>
-                                                    <FormControl size="small" fullWidth>
-                                                        <InputLabel>Status</InputLabel>
-                                                        <Select
-                                                            multiple
-                                                            value={statusFilter}
-                                                            label="Status"
-                                                            onChange={(e) => setStatusFilter(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                                            renderValue={(selected) => selected.join(', ')}
-                                                        >
-                                                            {['NEW', 'MODIFIED', 'DELETED'].map((status) => (
-                                                                <MenuItem key={status} value={status}>
-                                                                    <Checkbox checked={statusFilter.indexOf(status) > -1} />
-                                                                    <ListItemText primary={status} />
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                    <FormControl size="small" fullWidth>
-                                                        <InputLabel>Content Type</InputLabel>
-                                                        <Select
-                                                            multiple
-                                                            value={contentTypeFilter}
-                                                            label="Content Type"
-                                                            onChange={(e) => setContentTypeFilter(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                                            renderValue={(selected) => `${selected.length} selected`}
-                                                        >
-                                                            {Array.from(new Set(scanResults.map(r => r.contentTypeId))).map((type: any) => (
-                                                                <MenuItem key={type} value={type}>
-                                                                    <Checkbox checked={contentTypeFilter.indexOf(type) > -1} />
-                                                                    <ListItemText primary={type} />
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                </Box>
-                                                {availableLocales.length > 0 && (
-                                                    <FormControl size="small" fullWidth>
-                                                        <InputLabel>Locales to Migrate</InputLabel>
-                                                        <Select
-                                                            multiple
-                                                            value={localeFilter}
-                                                            label="Locales to Migrate"
-                                                            onChange={(e) => setLocaleFilter(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                                            renderValue={(selected) => `${selected.length} selected`}
-                                                        >
-                                                            {availableLocales.map((locale: string) => (
-                                                                <MenuItem key={locale} value={locale}>
-                                                                    <Checkbox checked={localeFilter.indexOf(locale) > -1} />
-                                                                    <ListItemText primary={locale} />
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                )}
-                                            </Box>
-
-                                            <Box sx={{ flex: 1, minHeight: 0 }}>
-                                                <ScanResultsList
-                                                    items={filteredResults}
-                                                    selectedIds={Array.from(selectedItems)}
-                                                    onToggleSelect={handleToggleSelect}
-                                                    onItemClick={handleItemClick}
-                                                    height="100%"
-                                                />
-                                            </Box>
-                                            <Box sx={{ mt: 2 }}>
-                                                <Button
-                                                    variant="contained"
-                                                    color="secondary"
-                                                    fullWidth
-                                                    onClick={handleMigrate}
-                                                    disabled={selectedItems.size === 0 || isMigrating || !sourceBackupFile}
-                                                >
-                                                    {isMigrating ? <CircularProgress size={24} color="inherit" /> : `Migrate Selected (${selectedItems.size})`}
-                                                </Button>
-                                            </Box>
-                                        </Box>
-
-                                        {/* Right Panel */}
-                                        <Box sx={{ flex: '0 0 58.333%', display: 'flex', flexDirection: 'column' }}>
-                                            {diffData ? (
-                                                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                                                    <DiffViewer
-                                                        oldValue={diffData.oldValue}
-                                                        newValue={diffData.newValue}
-                                                        sourceAssets={sourceAssets}
-                                                        targetAssets={targetAssets}
-                                                        sourceEntries={sourceEntries}
-                                                        targetEntries={targetEntries}
-                                                    />
-                                                </Box>
-                                            ) : (
-                                                <Paper variant="outlined" sx={{ flex: 1, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.paper' }}>
-                                                    <Typography color="text.secondary">
-                                                        Select an item to view details
-                                                    </Typography>
-                                                </Paper>
-                                            )}
-                                        </Box>
-                                    </Box>
-                                </Box>
-                            ) : (
-                                <Box sx={{ textAlign: 'center', color: 'text.secondary', mt: 10 }}>
-                                    <Typography variant="h6">
-                                        {hasScanned
-                                            ? 'No differences found between the selected environments.'
-                                            : 'Select environments and click Scan to see differences'}
-                                    </Typography>
-                                </Box>
-                            )}
-                        </Paper>
-                    </Container>
-                </Box>
+            {sm.diff && (
+                <LocaleRemapModal
+                    open={localeRemapOpen}
+                    onClose={() => setLocaleRemapOpen(false)}
+                    sourceLocales={sm.diff!.sourceLocales}
+                    targetLocales={sm.diff!.targetLocales.length > 0 ? sm.diff!.targetLocales : sm.diff!.sourceLocales}
+                    initialMapping={sm.localeMapping}
+                    onApply={sm.setLocaleMapping}
+                />
             )}
-
-            <Dialog
-                open={successDialogOpen}
-                onClose={() => setSuccessDialogOpen(false)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle sx={{ textAlign: 'center', color: 'success.main', fontWeight: 'bold' }}>
-                    Migration Successful!
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ textAlign: 'center', py: 2 }}>
-                        <Typography variant="body1" paragraph>
-                            Selected items have been successfully migrated to the target environment.
-                        </Typography>
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
-                    <Button variant="contained" onClick={() => setSuccessDialogOpen(false)} color="success" size="large">
-                        Close
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog
-                open={errorDialogOpen}
-                onClose={() => setErrorDialogOpen(false)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle sx={{ textAlign: 'center', color: 'error.main', fontWeight: 'bold' }}>
-                    Migration Failed
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ textAlign: 'center', py: 2 }}>
-                        <Typography variant="body1" paragraph>
-                            An error occurred during migration.
-                        </Typography>
-                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fff5f5', borderColor: '#ffcdd2', display: 'inline-block', maxWidth: '100%', overflow: 'auto' }}>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'error.main' }}>
-                                {errorDialogMessage}
-                            </Typography>
-                        </Paper>
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
-                    <Button variant="contained" onClick={() => setErrorDialogOpen(false)} color="error" size="large">
-                        Close
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </>
+        </div>
     );
 }

@@ -1,6 +1,7 @@
 import React from 'react';
-import { DialogTitle, Box, Typography, Chip } from '@mui/material';
-import styles from './RestoreProgressModal.module.css';
+import { DialogHeader as ShadcnDialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Database } from "lucide-react";
 
 interface DialogHeaderProps {
   completedSteps: number;
@@ -9,22 +10,24 @@ interface DialogHeaderProps {
 
 const DialogHeader = React.memo<DialogHeaderProps>(({ completedSteps, totalSteps }) => {
   return (
-    <DialogTitle className={styles.dialogTitle}>
-      <Box className={styles.titleContainer}>
-        <Typography variant="h6">
-          Restoring Backup
-        </Typography>
-        <Chip 
-          label={`${completedSteps}/${totalSteps} completed`}
-          color="primary"
-          size="small"
-        />
-      </Box>
-    </DialogTitle>
+    <ShadcnDialogHeader className="bg-muted/40 p-6 pr-14 border-b border-border/50">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Database className="h-5 w-5 text-primary" />
+          </div>
+          <DialogTitle className="text-xl font-extrabold uppercase tracking-tight">
+            Restoration Sequence
+          </DialogTitle>
+        </div>
+        <Badge variant="outline" className="h-6 px-3 text-[10px] font-extrabold uppercase tracking-widest bg-primary/10 text-primary border-primary/20">
+          {completedSteps} / {totalSteps} COMPLETED
+        </Badge>
+      </div>
+    </ShadcnDialogHeader>
   );
 });
 
 DialogHeader.displayName = 'DialogHeader';
 
 export default DialogHeader;
-

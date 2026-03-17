@@ -2,200 +2,184 @@ import { spawn } from 'cross-spawn';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const CONTENTFUL_OAUTH_CLIENT_ID = process.env.CONTENTFUL_OAUTH_CLIENT_ID || '9f86a1d54f3d6f85c159468f5919d6e5d27716b3ed68fd01bd534e3dea2df864';
-const CONTENTFUL_OAUTH_REDIRECT_URI = process.env.CONTENTFUL_OAUTH_REDIRECT_URI || 'https://www.contentful.com/developers/cli-oauth-page/';
-const CONTENTFUL_OAUTH_SCOPE = process.env.CONTENTFUL_OAUTH_SCOPE || 'content_management_manage';
-
 export class ContentfulCLI {
-  static getAuthUrl(): string {
-    const params = new URLSearchParams({
-      response_type: 'token',
-      client_id: CONTENTFUL_OAUTH_CLIENT_ID,
-      redirect_uri: CONTENTFUL_OAUTH_REDIRECT_URI,
-      scope: CONTENTFUL_OAUTH_SCOPE,
+  /**
+   * Universal helper to execute Contentful CLI commands.
+   * Note: Legacy authentication methods (getAuthUrl, checkAuthStatus, etc.) were removed 
+   * because tokens are now managed per-user in the database, making global CLI auth obsolete.
+   */
+  private static async executeCLI(
+    args: string[],
+    token: string,
+    onLog?: (message: string) => void
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    return new Promise((resolve) => {
+      // Ensure PATH is preserved and token is set
+      const env = { ...process.env, CONTENTFUL_MANAGEMENT_TOKEN: token };
+
+      const scrubbedArgs = args.map(a => (a === token ? '***' : a));
+      onLog?.(`[CLI] Running: npx ${scrubbedArgs.join(' ')}`);
+
+      // Do not use shell: true so cross-spawn correctly resolves npx.cmd on Windows
+      const cp = spawn('npx', args, { env });
+      let stdout = '';
+      let stderr = '';
+
+      cp.on('error', (err) => {
+        onLog?.(`[CLI Error] Failed to start process: ${err.message}`);
+        resolve({ code: -1, stdout: '', stderr: err.message });
+      });
+
+      cp.stdout?.on('data', (data) => {
+        const text = data.toString();
+        stdout += text;
+        onLog?.(text); // Preserve raw output for UI formatting
+      });
+
+      cp.stderr?.on('data', (data) => {
+        const text = data.toString();
+        stderr += text;
+        onLog?.(text); // Preserve raw output for UI formatting
+      });
+
+      cp.on('close', (code) => {
+        resolve({ code, stdout, stderr });
+      });
     });
-    return `https://be.contentful.com/oauth/authorize?${params.toString()}`;
   }
 
-  static async checkAuthStatus(): Promise<{ loggedIn: boolean; config?: string }> {
-    if (process.env.CONTENTFUL_MANAGEMENT_TOKEN) {
-      return { loggedIn: true, config: 'env' };
-    }
-
-    try {
-      const homedir = require('os').homedir();
-      const configPath = path.join(homedir, '.contentfulrc.json');
-      if (fs.existsSync(configPath)) {
-        const fileContent = fs.readFileSync(configPath, 'utf-8');
-        const config = JSON.parse(fileContent);
-        if (config.managementToken) {
-          return { loggedIn: true, config: 'file' };
-        }
-      }
-    } catch (error) {
-      // Ignore error
-    }
-
-    return { loggedIn: false };
-  }
-
-  static async saveToken(token: string): Promise<void> {
-    const homedir = require('os').homedir();
-    const configPath = path.join(homedir, '.contentfulrc.json');
-    let config: any = {};
-
-    if (fs.existsSync(configPath)) {
-      try {
-        const fileContent = fs.readFileSync(configPath, 'utf-8');
-        config = JSON.parse(fileContent);
-      } catch (e) {
-        // Ignore error, start with empty config
-      }
-    }
-
-    config.managementToken = token;
-    // Also set the environment variable for the current process usage
-    process.env.CONTENTFUL_MANAGEMENT_TOKEN = token;
-
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-  }
-
-  static async logout(): Promise<boolean> {
-    try {
-      const homedir = require('os').homedir();
-      const configPath = path.join(homedir, '.contentfulrc.json');
-
-      if (fs.existsSync(configPath)) {
-        const fileContent = fs.readFileSync(configPath, 'utf-8');
-        const config = JSON.parse(fileContent);
-
-        if (config.managementToken) {
-          delete config.managementToken;
-          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-        }
-      }
-
-      delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;
-      return true;
-    } catch (error) {
-      console.error('Logout failed:', error);
-      return false;
-    }
-  }
+  /**
+   * Executes `contentful space export` CLI command to create a JSON backup of a given environment.
+   * Can optionally download assets and include drafts/archived entries.
+   *
+   * @param spaceId - Target Contentful Space ID
+   * @param environmentId - Target Environment ID (e.g., 'master')
+   * @param spaceName - Human-readable space name used for generating the filename
+   * @param token - Contentful Management Token (CMA)
+   * @param onLog - Optional callback to stream CLI stdout/stderr logs
+   * @param includeAssets - If true, passes `--download-assets` flag
+   * @param includeDrafts - If true, includes unpublished entries
+   * @param includeArchived - If true, includes archived entries
+   * @returns Object containing success status, generated backup filename, and optional assets path
+   */
   static async createBackup(
     spaceId: string,
     environmentId: string,
     spaceName: string,
-    onLog?: (message: string) => void
-  ): Promise<{ success: boolean; backupFile?: string }> {
-    return new Promise((resolve) => {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupDir = path.join(process.cwd(), 'backups', spaceId);
-      const backupFile = path.join(backupDir, `${spaceName}-${environmentId}-${timestamp}.json`);
+    token: string,
+    onLog?: (message: string) => void,
+    includeAssets: boolean = false,
+    includeDrafts: boolean = true,
+    includeArchived: boolean = true
+  ): Promise<{ success: boolean; backupFile?: string; assetsPath?: string }> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupDir = path.join(process.cwd(), 'backups', spaceId);
+    const backupFile = path.join(backupDir, `${spaceName}-${environmentId}-${timestamp}.json`);
 
-      if (!fs.existsSync(backupDir)) {
-        fs.mkdirSync(backupDir, { recursive: true });
-      }
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
-      onLog?.(`Starting export for space: ${spaceId}, environment: ${environmentId}`);
-      onLog?.(`Backup file: ${backupFile}`);
+    onLog?.(`[CLI] Starting export for space: ${spaceId} (${environmentId})`);
 
-      const exportProcess = spawn('contentful', [
-        'space', 'export',
-        '--space-id', spaceId,
-        '--environment-id', environmentId,
-        '--content-file', backupFile,
-        '--skip-roles',
-        '--skip-webhooks'
-      ], {
-        env: { ...process.env, PATH: process.env.PATH }
-      });
+    const args = [
+      'contentful', 'space', 'export',
+      '--space-id', spaceId,
+      '--environment-id', environmentId,
+      '--content-file', backupFile,
+      '--skip-roles',
+      '--skip-webhooks',
+      '--management-token', token
+    ];
 
-      if (exportProcess.stdout) {
-        exportProcess.stdout.on('data', (data) => {
-          onLog?.(data.toString());
-        });
-      }
+    if (includeAssets) args.push('--download-assets');
+    if (includeDrafts) args.push('--include-drafts');
+    if (includeArchived) args.push('--include-archived');
 
-      if (exportProcess.stderr) {
-        exportProcess.stderr.on('data', (data) => {
-          onLog?.(data.toString());
-        });
-      }
+    const { code } = await this.executeCLI(args, token, onLog);
 
-      exportProcess.on('close', (code) => {
-        if (code === 0) {
-          onLog?.('Export completed successfully.');
-          resolve({ success: true, backupFile: path.basename(backupFile) });
-        } else {
-          onLog?.(`Export failed with code ${code}`);
-          resolve({ success: false });
-        }
-      });
-    });
+    if (code === 0) {
+      onLog?.('[CLI] Export completed successfully.');
+      return {
+        success: true,
+        backupFile: path.basename(backupFile),
+        assetsPath: includeAssets ? path.join(backupDir, 'assets') : undefined
+      };
+    }
+
+    onLog?.(`[CLI] Export failed with code ${code}`);
+    return { success: false };
   }
 
+  /**
+   * Executes `contentful space import` CLI command to restore a JSON backup to a target environment.
+   * Supports skipping publishing and custom asset directories.
+   *
+   * @param spaceId - Target Contentful Space ID
+   * @param fileName - Name of the JSON backup file (must exist in `backups/[spaceId]`)
+   * @param environmentId - Target Environment ID to restore into
+   * @param token - Contentful Management Token (CMA)
+   * @param onLog - Optional callback to stream CLI stdout/stderr logs
+   * @param skipPublishing - If true, passes `--skip-content-publishing` flag (leaves imported entries in Draft state)
+   * @param assetsDir - Optional absolute path to a folder containing assets to restore
+   * @throws Error if the import fails or completes with unresolvable data validation errors
+   */
   static async restoreBackup(
     spaceId: string,
     fileName: string,
     environmentId: string,
+    token: string,
     onLog?: (message: string) => void,
-    skipPublishing: boolean = false
+    skipPublishing: boolean = false,
+    assetsDir?: string
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
+    const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
 
-      if (!fs.existsSync(backupFilePath)) {
-        reject(new Error(`Backup file not found: ${backupFilePath}`));
-        return;
+    if (!fs.existsSync(backupFilePath)) {
+      throw new Error(`Backup file not found: ${backupFilePath}`);
+    }
+
+    const logDir = path.join(process.cwd(), 'backups', 'logs');
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    const logFilePath = path.join(logDir, `contentful-import-error-log-${spaceId}-${Date.now()}.json`);
+
+    onLog?.(`[CLI] Starting import to ${spaceId} (${environmentId})`);
+
+    const args = [
+      'contentful', 'space', 'import',
+      '--space-id', spaceId,
+      '--environment-id', environmentId,
+      '--content-file', backupFilePath,
+      '--skip-roles',
+      '--skip-webhooks',
+      '--error-log-file', logFilePath,
+      '--management-token', token
+    ];
+
+    if (assetsDir) args.push('--assets-directory', assetsDir);
+    if (skipPublishing) args.push('--skip-content-publishing');
+
+    const { code, stdout, stderr } = await this.executeCLI(args, token, onLog);
+
+    // Look for the CLI's error summary: "The following X errors and Y warnings occurred"
+    const errorMatch = stdout.match(/The following ([1-9]\d*) errors?/i) || stdout.match(/(\d+) errors? occurred/i);
+    const hasDataErrors = errorMatch && parseInt(errorMatch[1]) > 0;
+
+    const isSuccess = code === 0 && !hasDataErrors;
+    const hasCriticalError = stderr.includes('Error:') && !stderr.includes('Warning') &&
+      (stderr.includes('Unauthorized') || stderr.includes('Access denied') || stderr.includes('not found'));
+
+    if (isSuccess && !hasCriticalError && !hasDataErrors) {
+      onLog?.('[CLI] Import completed successfully.');
+    } else {
+      console.error(`[RESTORE CLI DEBUG] Import failed. Code: ${code}. Errors: ${hasDataErrors ? errorMatch[1] : 0}. Stdout: ${stdout.substring(0, 500)}... Stderr: ${stderr}`);
+
+      let errorReason = `Import failed with code ${code}.`;
+      if (hasDataErrors) {
+        errorReason = `Import completed with ${errorMatch[1]} data errors (e.g. validation or content model conflicts). Check the Contentful error log for details.`;
+      } else if (stderr) {
+        errorReason = `Import failed. Details: ${stderr}`;
       }
 
-      onLog?.(`Starting import to space: ${spaceId}, environment: ${environmentId}`);
-      onLog?.(`Using backup file: ${fileName}`);
-      if (skipPublishing) {
-        onLog?.('Skipping content publishing (all items will be Draft).');
-      }
-
-      const args = [
-        'space', 'import',
-        '--space-id', spaceId,
-        '--environment-id', environmentId,
-        '--content-file', backupFilePath,
-        '--content-model-only', 'false'
-      ];
-
-      if (skipPublishing) {
-        args.push('--skip-content-publishing');
-      }
-
-      const importProcess = spawn('contentful', args, {
-        env: { ...process.env, PATH: process.env.PATH }
-      });
-
-      let errorOutput = '';
-
-      if (importProcess.stdout) {
-        importProcess.stdout.on('data', (data) => {
-          onLog?.(data.toString());
-        });
-      }
-
-      if (importProcess.stderr) {
-        importProcess.stderr.on('data', (data) => {
-          const text = data.toString();
-          errorOutput += text;
-          onLog?.(text);
-        });
-      }
-
-      importProcess.on('close', (code) => {
-        if (code === 0) {
-          onLog?.('Import completed successfully.');
-          resolve();
-        } else {
-          reject(new Error(`Import failed with code ${code}. Details: ${errorOutput}`));
-        }
-      });
-    });
+      throw new Error(errorReason);
+    }
   }
 }

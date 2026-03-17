@@ -1,5 +1,8 @@
 import React, { useMemo } from 'react';
-import { Dialog, DialogContent } from '@mui/material';
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import DialogHeader from './DialogHeader';
 import OverallProgress from './OverallProgress';
 import CurrentStep from './CurrentStep';
@@ -7,7 +10,6 @@ import StepsList from './StepsList';
 import TimeInfo from './TimeInfo';
 import DialogActions from './DialogActions';
 import { RestoreProgressModalProps } from './types';
-import styles from './RestoreProgressModal.module.css';
 
 const RestoreProgressModal = React.memo<RestoreProgressModalProps>(({
   open,
@@ -29,34 +31,33 @@ const RestoreProgressModal = React.memo<RestoreProgressModalProps>(({
   const currentStepData = currentStep < steps.length ? steps[currentStep] : undefined;
 
   return (
-    <Dialog
-      open={open}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{
-        className: styles.dialogPaper
-      }}
-    >
-      <DialogHeader 
-        completedSteps={completedSteps}
-        totalSteps={totalSteps}
-      />
+    <Dialog open={open} onOpenChange={(val) => !val && isCompleted && onClose && onClose()}>
+      <DialogContent className="sm:max-w-xl md:max-w-2xl border-primary/20 bg-card/95 backdrop-blur-xl p-0 overflow-hidden">
+        <div className="flex flex-col h-full max-h-[85vh]">
+          <DialogHeader
+            completedSteps={completedSteps}
+            totalSteps={totalSteps}
+          />
 
-      <DialogContent className={styles.dialogContent}>
-        <OverallProgress overallProgress={overallProgress} />
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <OverallProgress overallProgress={overallProgress} />
 
-        {currentStepData && (
-          <CurrentStep step={currentStepData} />
-        )}
+            {currentStepData && (
+              <CurrentStep step={currentStepData} />
+            )}
 
-        <StepsList steps={steps} />
+            <StepsList steps={steps} />
 
-        <TimeInfo isCompleted={isCompleted} hasErrors={hasErrors} />
+            <TimeInfo isCompleted={isCompleted} hasErrors={hasErrors} />
+          </div>
+
+          {(isCompleted || hasErrors) && (
+            <div className="p-4 bg-muted/40 border-t border-border/50">
+              <DialogActions onClose={onClose} />
+            </div>
+          )}
+        </div>
       </DialogContent>
-
-      {(isCompleted || hasErrors) && (
-        <DialogActions onClose={onClose} />
-      )}
     </Dialog>
   );
 });
@@ -65,4 +66,4 @@ RestoreProgressModal.displayName = 'RestoreProgressModal';
 
 export default RestoreProgressModal;
 export type { RestoreProgressModalProps } from './types';
-export type { RestoreStep } from './types'; 
+export type { RestoreStep } from './types';

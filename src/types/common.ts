@@ -3,10 +3,13 @@ export interface Environment {
   name: string;
   createdAt?: string;
 }
-export interface Environment {
-  id: string;
+
+export interface Locale {
+  code: string;
   name: string;
-  createdAt?: string;
+  default?: boolean;
+  fallbackCode?: string | null;
+  sys?: { id: string };
 }
 
 export interface Space {

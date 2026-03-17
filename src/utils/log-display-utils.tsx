@@ -1,39 +1,21 @@
-import React from 'react';
-import { 
-  Error as ErrorIcon, 
-  Warning as WarningIcon, 
-  Info as InfoIcon 
-} from '@mui/icons-material';
+import {
+  AlertCircle as ErrorIcon,
+  AlertTriangle as WarningIcon,
+  Info as InfoIcon
+} from 'lucide-react';
 import { LogError, FormattedError } from '@/components/JsonLogDisplay/types';
 
 export const getSeverityIcon = (type: string): React.ReactElement => {
-  switch (type.toLowerCase()) {
-    case 'error':
-      return <ErrorIcon color="error" />;
-    case 'warning':
-      return <WarningIcon color="warning" />;
-    case 'info':
-      return <InfoIcon color="info" />;
-    default:
-      return <InfoIcon />;
-  }
-};
-
-export const getSeverityColor = (type: string): 'error' | 'warning' | 'info' | 'default' => {
-  switch (type.toLowerCase()) {
-    case 'error':
-      return 'error';
-    case 'warning':
-      return 'warning';
-    case 'info':
-      return 'info';
-    default:
-      return 'default';
-  }
+  const t = type.toLowerCase();
+  if (t === 'error') return <ErrorIcon className="text-destructive h-5 w-5" />;
+  if (t === 'warning') return <WarningIcon className="text-yellow-500 h-5 w-5" />;
+  return <InfoIcon className="text-blue-500 h-5 w-5" />;
 };
 
 export const formatError = (error: LogError): FormattedError => {
-  if (error.message.includes('You need to omit a field before deleting it')) {
+  const msg = error.message;
+
+  if (msg.includes('You need to omit a field before deleting it')) {
     return {
       title: 'Content Type Field Deletion Error',
       description: 'A field in a content type cannot be deleted directly. It needs to be made optional first.',
@@ -47,8 +29,8 @@ export const formatError = (error: LogError): FormattedError => {
       ]
     };
   }
-  
-  if (error.message.includes('Rate limit')) {
+
+  if (msg.includes('Rate limit')) {
     return {
       title: 'Rate Limit Exceeded',
       description: 'Contentful API rate limit was exceeded. This is normal for large backups.',
@@ -63,7 +45,7 @@ export const formatError = (error: LogError): FormattedError => {
 
   return {
     title: 'Unknown Error',
-    description: error.message,
+    description: msg,
     steps: ['Please check the error details and try again']
   };
 };

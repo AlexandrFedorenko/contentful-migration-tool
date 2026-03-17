@@ -3,7 +3,7 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { useLoading } from "./useLoading";
 import { useBackups } from "./useBackups";
 import { api } from "@/utils/api";
-import { AnalyzeContentTypesResponse, CustomMigrateResponse } from "@/types/api";
+import { AnalyzeContentTypesData, CustomMigrateData } from "@/types/api";
 
 interface EnvironmentValidation {
     spaceId: string;
@@ -46,7 +46,7 @@ export function useCustomMigrate() {
             setLoading("loadingAnalyze", true);
 
             try {
-                const response = await api.post<AnalyzeContentTypesResponse>('/api/analyze-content-types', {
+                const response = await api.post<AnalyzeContentTypesData>('/api/analyze-content-types', {
                     spaceId,
                     sourceEnvironment: selectedDonor,
                     targetEnvironment: selectedTarget
@@ -90,7 +90,7 @@ export function useCustomMigrate() {
             setLoading("loadingCustomMigrate", true);
 
             try {
-                const response = await api.post<CustomMigrateResponse>('/api/custom-migrate', {
+                const response = await api.post<CustomMigrateData>('/api/custom-migrate', {
                     spaceId,
                     sourceEnvironment: selectedDonor,
                     targetEnvironment: selectedTarget,
@@ -136,7 +136,7 @@ export function useCustomMigrate() {
             setLoading("loadingCustomMigrate", true);
 
             try {
-                const response = await api.post<CustomMigrateResponse>('/api/custom-migrate', {
+                const response = await api.post<CustomMigrateData>('/api/custom-migrate', {
                     spaceId,
                     sourceEnvironment: selectedDonor,
                     targetEnvironment: selectedTarget,

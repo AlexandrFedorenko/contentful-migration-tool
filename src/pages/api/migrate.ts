@@ -1,3 +1,6 @@
+import { getAuth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ContentfulCLI } from "@/utils/contentful-cli";
 import { ContentfulManagement } from "@/utils/contentful-management";
@@ -14,6 +17,11 @@ export default async function handler(
 ) {
     if (req.method !== "POST") {
         return res.status(405).json({ success: false, error: "Method not allowed" });
+    }
+
+    const { userId } = getAuth(req);
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
     const { spaceId, sourceEnvironment, targetEnvironment }: MigrateRequest = req.body;
@@ -46,18 +54,28 @@ export default async function handler(
         res.write(`data: ${JSON.stringify({ type: 'error', error })}\n\n`);
     };
 
-    const sendComplete = (data: any) => {
-        res.write(`data: ${JSON.stringify({ type: 'complete', data })}\n\n`);
+    const sendComplete = (data: unknown) => {
+        res.write(`data: ${JSON.stringify({ type: 'complete', success: true, data })}\n\n`);
     };
 
     try {
+        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+        if (!user || !user.contentfulToken) {
+            const error = 'Contentful token not set in profile';
+            sendError(error);
+            res.end();
+            return;
+        }
+
+        const token = decrypt(user.contentfulToken);
+
         sendLog(`Starting migration check for Space: ${spaceId}`);
-        const space = await ContentfulManagement.getSpace(spaceId);
+        const space = await ContentfulManagement.getSpace(spaceId, token);
         const spaceName = space?.name || spaceId;
         sendLog(`Space found: ${spaceName}`);
 
         sendLog(`Creating backup of source environment: ${sourceEnvironment}...`);
-        const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName, (msg) => {
+        const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName, token, (msg) => {
             sendLog(`[Source Backup] ${msg}`);
         });
 
@@ -67,7 +85,7 @@ export default async function handler(
         sendLog(`Source backup created: ${sourceBackupResult.backupFile}`);
 
         sendLog(`Creating backup of target environment: ${targetEnvironment}...`);
-        const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName, (msg) => {
+        const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName, token, (msg) => {
             sendLog(`[Target Backup] ${msg}`);
         });
 
@@ -77,7 +95,7 @@ export default async function handler(
         sendLog(`Target backup created: ${targetBackupResult.backupFile}`);
 
         sendLog(`Restoring content from source backup to target environment...`);
-        await ContentfulCLI.restoreBackup(spaceId, sourceBackupResult.backupFile, targetEnvironment, (msg) => {
+        await ContentfulCLI.restoreBackup(spaceId, sourceBackupResult.backupFile, targetEnvironment, token, (msg) => {
             sendLog(`[Restore] ${msg}`);
         });
 

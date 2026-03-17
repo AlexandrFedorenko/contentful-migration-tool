@@ -2,85 +2,60 @@ import { useCallback } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { useLoading } from "./useLoading";
 import { handleError } from "@/utils/errorHandler";
+import { Backup } from "@/types/backup";
+import { api } from "@/utils/api";
+import { useBackups } from "./useBackups";
 
 interface DeleteBackupRequest {
     spaceId: string;
-    fileName: string;
-    filePath: string;
+    backupId: string;
+    fileName?: string; // Optional legacy
 }
-
-interface DeleteBackupResponse {
-    success: boolean;
-    error?: string;
-}
-
-interface BackupsResponse {
-    backups: Array<{
-        name: string;
-        path: string;
-        time: number;
-    }>;
-}
-
-const loadBackups = async (spaceId: string): Promise<BackupsResponse> => {
-    const response = await fetch(`/api/backups?spaceId=${spaceId}`);
-    if (!response.ok) {
-        throw new Error('Failed to load backups');
-    }
-    return response.json();
-};
 
 export function useBackupDelete() {
     const { dispatch } = useGlobalContext();
     const { withLoading } = useLoading();
+    const { loadBackups } = useBackups();
 
     const handleDelete = useCallback(async (
         spaceId: string,
-        fileName: string,
-        filePath: string
+        backup: Backup
     ) => {
         try {
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Deleting backup ${fileName}...` 
+            if (!backup.id) {
+                throw new Error("Backup ID is missing");
+            }
+
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Deleting backup ${backup.name}...`
             });
 
             await withLoading("loadingDelete", async () => {
-                const response = await fetch('/api/deleteBackup', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        spaceId,
-                        fileName,
-                        filePath
-                    } as DeleteBackupRequest)
-                });
+                const result = await api.post<void>('/api/deleteBackup', {
+                    spaceId,
+                    backupId: backup.id,
+                    fileName: backup.name
+                } as DeleteBackupRequest);
 
-                if (!response.ok) {
-                    const data: DeleteBackupResponse = await response.json();
-                    throw new Error(data.error || 'Failed to delete backup');
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to delete backup');
                 }
             });
 
-            const backupsData = await loadBackups(spaceId);
-            dispatch({ 
-                type: "SET_DATA", 
-                payload: { backups: backupsData.backups } 
-            });
+            await loadBackups(spaceId, true);
 
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Backup ${fileName} deleted successfully` 
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Backup ${backup.name} deleted successfully`
             });
         } catch (error) {
-            dispatch({ 
-                type: "SET_STATUS", 
-                payload: `Error deleting backup: ${handleError(error)}` 
+            dispatch({
+                type: "SET_STATUS",
+                payload: `Error deleting backup: ${handleError(error)}`
             });
         }
-    }, [dispatch, withLoading]);
+    }, [dispatch, withLoading, loadBackups]);
 
     return { handleDelete };
-} 
+}

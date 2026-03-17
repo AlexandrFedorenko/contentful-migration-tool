@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import * as path from 'path';
-import * as fs from 'fs';
+import { BackupService } from '@/utils/backup-service';
+import { getAuth } from '@clerk/nextjs/server';
 
 export default async function handler(
     req: NextApiRequest,
@@ -10,32 +10,30 @@ export default async function handler(
         return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    const { spaceId, fileName } = req.query;
+    const { userId } = getAuth(req);
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
 
-    if (!spaceId || !fileName || typeof spaceId !== 'string' || typeof fileName !== 'string') {
+    const { backupId, fileName } = req.query;
+
+    if (!backupId || typeof backupId !== 'string') {
         return res.status(400).json({
             success: false,
-            error: 'Space ID and file name are required'
+            error: 'Backup ID is required'
         });
     }
 
     try {
-        const backupFilePath = path.join(process.cwd(), 'backups', spaceId, fileName);
-
-        if (!fs.existsSync(backupFilePath)) {
-            return res.status(404).json({
-                success: false,
-                error: 'Backup file not found'
-            });
-        }
-
-        // Read the file
-        const fileContent = fs.readFileSync(backupFilePath);
+        const content = await BackupService.getBackupContent(backupId, userId);
 
         // Set headers for file download
+        const downloadName = typeof fileName === 'string' ? fileName : `backup-${backupId}.json`;
+        const fileContent = JSON.stringify(content, null, 2);
+
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        res.setHeader('Content-Length', fileContent.length);
+        res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+        res.setHeader('Content-Length', Buffer.byteLength(fileContent));
 
         // Send the file
         res.status(200).send(fileContent);

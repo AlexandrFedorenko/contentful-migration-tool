@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique // ID from Clerk
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  displayName String?
+  role      String   @default("MEMBER") // ADMIN or MEMBER
+  
+  // Legacy Encrypted tokens for integrations
+  contentfulToken String? 
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  scripts       Script[]
+  backups       BackupRecord[]
+  templates     VisualBuilderTemplate[]
+  tokens        ContentfulToken[]
+  supportTickets SupportRequest[]
+}
+
+model ContentfulToken {
+  id        String   @id @default(uuid())
+  alias     String
+  token     String   // Encrypted token
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SupportRequest {
+  id            String   @id @default(uuid())
+  name          String?
+  email         String
+  message       String
+  screenshotUrl String?
+  status        String   @default("OPEN") // OPEN, RESOLVED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model VisualBuilderTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     Json     // Stores the steps array
+  category    String   // e.g., "custom"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Script {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     String   // The migration script code
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BackupRecord {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String   // "LOCAL_DB"
+  spaceId     String   // Contentful Space ID
+
+  
+  // If LOCAL_DB, content is stored here (Max 5 per user)
+  content     Json?
+  
+  // If EXTERNAL, store the file ID/Path (Legacy)
+  externalId  String?
+  
+  createdAt   DateTime @default(now())
+  hasZip      Boolean  @default(false)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String   @default("INFO") // INFO, WARN, ERROR
+  action    String   // e.g., "BACKUP_CREATE", "MIGRATION_RUN"
+  message   String
+  details   Json?    // Store detailed metadata or error stacks
+  status    String?  // SUCCESS, FAILED
+  logFile   String?  // Path to detailed JSON error log
+  
+  userId    String?
+  userEmail String?
+  
+  timestamp DateTime @default(now())
+  
+  @@index([action])
+  @@index([level])
+  @@index([timestamp])
+}
+
+model AppSettings {
+  id                 String   @id @default("default")
+  betaBannerEnabled  Boolean  @default(true)
+  betaBannerText     String   @default("🚀 This is a beta version of the app")
+  tickerEnabled      Boolean  @default(false)
+  tickerText         String   @default("Welcome to the migration tool!")
+  maxAssetSizeMB     Int      @default(1024)
+  maxBackupsPerUser  Int      @default(1)
+  enableAssetBackups Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+}

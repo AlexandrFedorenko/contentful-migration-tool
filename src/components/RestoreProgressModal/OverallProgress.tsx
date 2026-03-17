@@ -1,6 +1,5 @@
 import React from 'react';
-import { Box, Typography, LinearProgress } from '@mui/material';
-import styles from './RestoreProgressModal.module.css';
+import { Progress } from "@/components/ui/progress";
 
 interface OverallProgressProps {
   overallProgress: number;
@@ -8,25 +7,20 @@ interface OverallProgressProps {
 
 const OverallProgress = React.memo<OverallProgressProps>(({ overallProgress }) => {
   return (
-    <Box className={styles.progressSection}>
-      <Box className={styles.progressHeader}>
-        <Typography variant="body2" color="text.secondary">
-          Overall Progress
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {Math.round(overallProgress)}%
-        </Typography>
-      </Box>
-      <LinearProgress 
-        variant="determinate" 
-        value={overallProgress} 
-        className={styles.progressBar}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">
+          Overall Synchronization Status
+        </span>
+      </div>
+      <Progress
+        value={overallProgress}
+        className="h-2 bg-muted"
       />
-    </Box>
+    </div>
   );
 });
 
 OverallProgress.displayName = 'OverallProgress';
 
 export default OverallProgress;
-
