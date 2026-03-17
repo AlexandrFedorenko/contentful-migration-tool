@@ -1,63 +1,47 @@
 import React from 'react';
 import {
     Dialog,
-    DialogTitle,
     DialogContent,
-    DialogActions,
-    Button,
-    Typography,
-    Box,
-    IconButton
-} from '@mui/material';
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useError } from '@/context/ErrorContext';
-import CloseIcon from '@mui/icons-material/Close';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { AlertCircle } from 'lucide-react';
 
 export const GlobalErrorModal = () => {
     const { error, clearError } = useError();
 
-    if (!error) return null;
+    const isOpen = !!error;
 
     return (
-        <Dialog
-            open={!!error}
-            onClose={clearError}
-            maxWidth="sm"
-            fullWidth
-            PaperProps={{
-                sx: {
-                    borderRadius: 2,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                }
-            }}
-        >
-            <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                <ErrorOutlineIcon />
-                <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                    Error
-                </Typography>
-                <IconButton
-                    aria-label="close"
-                    onClick={clearError}
-                    sx={{
-                        color: (theme) => theme.palette.grey[500],
-                    }}
-                >
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
-            <DialogContent dividers>
-                <Box sx={{ py: 2 }}>
-                    <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {error}
-                    </Typography>
-                </Box>
+        <Dialog open={isOpen} onOpenChange={(open) => !open && clearError()}>
+            <DialogContent className="sm:max-w-md border-destructive/20 bg-card/95 backdrop-blur-xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl font-extrabold uppercase tracking-tight text-destructive">
+                        <AlertCircle className="h-5 w-5" /> Security Protocol Breach
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="py-6">
+                    <div className="p-4 bg-destructive/5 border border-destructive/10 rounded-lg">
+                        <p className="text-sm font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                            {error}
+                        </p>
+                    </div>
+                    <p className="mt-4 text-[10px] text-destructive uppercase tracking-widest font-extrabold text-center opacity-60">
+                        Operational interruption detected. System state preserved.
+                    </p>
+                </div>
+                <DialogFooter className="sm:justify-end">
+                    <Button
+                        onClick={clearError}
+                        className="bg-destructive hover:bg-destructive/90 text-white font-bold px-8 shadow-lg shadow-destructive/20"
+                    >
+                        ACKNOWLEDGE & DISMISS
+                    </Button>
+                </DialogFooter>
             </DialogContent>
-            <DialogActions sx={{ p: 2 }}>
-                <Button onClick={clearError} variant="contained" color="primary">
-                    Close
-                </Button>
-            </DialogActions>
         </Dialog>
     );
 };

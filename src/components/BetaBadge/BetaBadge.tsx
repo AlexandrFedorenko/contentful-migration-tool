@@ -1,28 +1,33 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { Badge } from "@/components/ui/badge";
+import { Zap } from "lucide-react";
+
 
 const BetaBadge = React.memo(() => {
+    const { settings, loading } = useAppSettings();
+
+    if (loading || !settings?.betaBannerEnabled) {
+        return null;
+    }
+
     return (
-        <Box
-            sx={{
-                position: "fixed",
-                bottom: 80,
-                right: 20,
-                backgroundColor: "rgba(0, 0, 0, 0.8)",
-                color: "white",
-                padding: "10px 15px",
-                borderRadius: "8px",
-                fontSize: "14px",
-                boxShadow: "0px 0px 10px rgba(0, 0, 0, 0.3)",
-                zIndex: 1000,
-            }}
-        >
-            <Typography variant="body2">🚀 This is a beta version of the app</Typography>
-        </Box>
+        <div className="fixed bottom-20 right-5 z-[40] animate-in slide-in-from-right-4 duration-500">
+            <div className="group relative">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-amber-500 rounded-lg blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200" />
+                <Badge
+                    className="relative px-4 py-2 bg-muted/80 backdrop-blur-xl border-border/50 hover:bg-muted/90 transition-all cursor-default flex items-center gap-2 shadow-2xl"
+                >
+                    <Zap className="h-3 w-3 text-amber-500 fill-amber-500" />
+                    <span className="text-xs font-bold tracking-normal bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+                        {settings.betaBannerText}
+                    </span>
+                </Badge>
+            </div>
+        </div>
     );
 });
 
 BetaBadge.displayName = 'BetaBadge';
 
 export default BetaBadge;
-

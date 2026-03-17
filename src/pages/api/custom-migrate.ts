@@ -12,67 +12,12 @@ interface CustomMigrateRequest {
   selectedContentTypes: string[];
 }
 
-interface ContentType {
-  sys: {
-    id: string;
-    type: string;
-    version: number;
-  };
-  name: string;
-  description?: string;
-  displayField?: string;
-  fields: ContentTypeField[];
-}
+import { BackupData } from "@/types/backup";
 
-interface ContentTypeField {
-  id: string;
-  name: string;
-  type: string;
-  required?: boolean;
-  localized?: boolean;
-  [key: string]: any;
-}
 
-interface BackupData {
-  contentTypes: ContentType[];
-  entries: Entry[];
-  assets: Asset[];
-  locales: Locale[];
-  editorInterfaces?: any[];
-  roles?: any[];
-  webhooks?: any[];
-}
-
-interface Entry {
-  sys: {
-    id: string;
-    contentType: {
-      sys: {
-        id: string;
-      };
-    };
-  };
-  fields: Record<string, any>;
-}
-
-interface Asset {
-  sys: {
-    id: string;
-    type: string;
-  };
-  [key: string]: any;
-}
-
-interface Locale {
-  code: string;
-  [key: string]: any;
-}
-
-const BACKUP_DELAY = 2000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+import { getAuth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 
 export default async function handler(
   req: NextApiRequest,
@@ -84,7 +29,18 @@ export default async function handler(
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+
   try {
+    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    if (!user || !user.contentfulToken) {
+      return res.status(400).json({ success: false, error: "Contentful token not found" });
+    }
+    const token = decrypt(user.contentfulToken);
+
     const { spaceId, sourceEnvironment, targetEnvironment, selectedContentTypes, action = 'preview', selectiveBackupFile }: CustomMigrateRequest & { action?: 'preview' | 'execute', selectiveBackupFile?: string } = req.body;
 
     if (!spaceId || !sourceEnvironment || !targetEnvironment) {
@@ -101,7 +57,7 @@ export default async function handler(
       });
     }
 
-    const space = await ContentfulManagement.getSpace(spaceId);
+    const space = await ContentfulManagement.getSpace(spaceId, token);
     const spaceName = space?.name || spaceId;
     const backupDir = path.join(process.cwd(), 'backups', spaceId);
 
@@ -111,7 +67,7 @@ export default async function handler(
       }
 
 
-      const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName);
+      const sourceBackupResult = await ContentfulCLI.createBackup(spaceId, sourceEnvironment, spaceName, token);
       if (!sourceBackupResult.success || !sourceBackupResult.backupFile) {
         throw new Error('Failed to create source environment backup');
       }
@@ -127,13 +83,15 @@ export default async function handler(
 
       return res.status(200).json({
         success: true,
-        sourceBackupFile: sourceBackupResult.backupFile,
-        previewData: {
-          entriesCount: selectiveBackup.entries.length,
-          assetsCount: selectiveBackup.assets.length,
-          contentTypesCount: selectiveBackup.contentTypes.length,
-          localesCount: selectiveBackup.locales.length,
-          selectiveBackupFile: path.basename(selectiveBackupPath)
+        data: {
+          sourceBackupFile: sourceBackupResult.backupFile,
+          previewData: {
+            entriesCount: selectiveBackup.entries?.length || 0,
+            assetsCount: selectiveBackup.assets?.length || 0,
+            contentTypesCount: selectiveBackup.contentTypes?.length || 0,
+            localesCount: selectiveBackup.locales?.length || 0,
+            selectiveBackupFile: path.basename(selectiveBackupPath)
+          }
         }
       });
 
@@ -143,17 +101,19 @@ export default async function handler(
       }
 
 
-      const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName);
+      const targetBackupResult = await ContentfulCLI.createBackup(spaceId, targetEnvironment, spaceName, token);
       if (!targetBackupResult.success || !targetBackupResult.backupFile) {
         throw new Error('Failed to create target environment backup');
       }
 
 
-      await ContentfulCLI.restoreBackup(spaceId, selectiveBackupFile, targetEnvironment);
+      await ContentfulCLI.restoreBackup(spaceId, selectiveBackupFile, targetEnvironment, token);
 
       return res.status(200).json({
         success: true,
-        targetBackupFile: targetBackupResult.backupFile
+        data: {
+          targetBackupFile: targetBackupResult.backupFile
+        }
       });
     } else {
       return res.status(400).json({ success: false, error: 'Invalid action' });
@@ -168,61 +128,77 @@ export default async function handler(
 }
 
 function createSelectiveBackup(sourceData: BackupData, selectedContentTypeIds: string[]): BackupData {
-  const selectedContentTypes = sourceData.contentTypes.filter(ct =>
+  const contentTypes = sourceData.contentTypes || [];
+  const selectedContentTypes = contentTypes.filter(ct =>
     selectedContentTypeIds.includes(ct.sys.id)
   );
 
-  const selectedEntries = sourceData.entries.filter(entry =>
+  const entries = sourceData.entries || [];
+  const selectedEntries = entries.filter(entry =>
     selectedContentTypeIds.includes(entry.sys.contentType.sys.id)
   );
 
   const referencedAssetIds = new Set<string>();
   selectedEntries.forEach(entry => {
-    extractAssetIds(entry.fields, referencedAssetIds);
+    if (entry.fields) {
+      extractAssetIds(entry.fields, referencedAssetIds);
+    }
   });
 
-  const selectedAssets = sourceData.assets.filter(asset =>
+  const assets = sourceData.assets || [];
+  const selectedAssets = assets.filter(asset =>
     referencedAssetIds.has(asset.sys.id)
   );
 
   const usedLocaleCodes = new Set<string>();
   selectedEntries.forEach(entry => {
-    Object.keys(entry.fields).forEach(fieldName => {
-      const fieldValue = entry.fields[fieldName];
-      if (fieldValue && typeof fieldValue === 'object') {
-        Object.keys(fieldValue).forEach(locale => {
-          usedLocaleCodes.add(locale);
-        });
-      }
-    });
+    if (entry.fields) {
+      Object.keys(entry.fields).forEach(fieldName => {
+        const fieldValue = entry.fields![fieldName];
+        if (fieldValue && typeof fieldValue === 'object') {
+          Object.keys(fieldValue).forEach(locale => {
+            usedLocaleCodes.add(locale);
+          });
+        }
+      });
+    }
   });
 
-  const selectedLocales = sourceData.locales.filter(locale =>
+  const locales = sourceData.locales || [];
+  const selectedLocales = locales.filter(locale =>
     usedLocaleCodes.has(locale.code)
   );
+
+  // Filter editor interfaces if they exist
+  let editorInterfaces: unknown[] = [];
+  if (sourceData.editorInterfaces) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    editorInterfaces = sourceData.editorInterfaces.filter((ei: any) =>
+      selectedContentTypeIds.includes(ei.sys.contentType.sys.id)
+    );
+  }
 
   return {
     contentTypes: selectedContentTypes,
     entries: selectedEntries,
     assets: selectedAssets,
     locales: selectedLocales,
-    editorInterfaces: sourceData.editorInterfaces?.filter(ei =>
-      selectedContentTypeIds.includes(ei.sys.contentType.sys.id)
-    ) || [],
-    roles: [],
-    webhooks: []
+    editorInterfaces: editorInterfaces
   };
 }
 
-function extractAssetIds(fields: any, assetIds: Set<string>) {
+function extractAssetIds(fields: Record<string, unknown>, assetIds: Set<string>) {
   Object.values(fields).forEach(fieldValue => {
     if (fieldValue && typeof fieldValue === 'object') {
-      Object.values(fieldValue).forEach((localeValue: any) => {
+      Object.values(fieldValue as Record<string, unknown>).forEach((localeValue: unknown) => {
         if (localeValue && typeof localeValue === 'object') {
-          if (localeValue.sys && localeValue.sys.type === 'Asset') {
-            assetIds.add(localeValue.sys.id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sys = (localeValue as any).sys;
+          if (sys && sys.type === 'Asset') {
+            assetIds.add(sys.id);
           } else if (Array.isArray(localeValue)) {
-            localeValue.forEach(item => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            localeValue.forEach((item: any) => {
               if (item && item.sys && item.sys.type === 'Asset') {
                 assetIds.add(item.sys.id);
               }

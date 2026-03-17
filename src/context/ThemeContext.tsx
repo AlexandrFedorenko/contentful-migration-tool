@@ -1,8 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
-
-// ... (existing code, note: we'll just target the import line and the useMemo usage separately if needed, but I'll do it in chunks)
-import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -12,88 +8,66 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-    mode: 'dark',
+    mode: 'dark', // Default fallback
     toggleTheme: () => { },
 });
 
 export const useTheme = () => useContext(ThemeContext);
 
+const THEME_STORAGE_KEY = 'theme_preference';
+
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const [mode, setMode] = useState<ThemeMode>('dark');
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
         // Load saved theme from localStorage
-        const savedMode = localStorage.getItem('themeMode') as ThemeMode;
-        if (savedMode) {
-            setMode(savedMode);
+        try {
+            const savedMode = localStorage.getItem(THEME_STORAGE_KEY);
+            if (savedMode === 'light' || savedMode === 'dark') {
+                setMode(savedMode);
+            }
+        } catch {
+            // Ignore localStorage read errors
         }
     }, []);
 
+    useEffect(() => {
+        if (!mounted) return;
+
+        // Apply theme class to document element
+        const root = window.document.documentElement;
+        if (mode === 'dark') {
+            root.classList.remove('light');
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+            root.classList.add('light');
+        }
+
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, mode);
+        } catch {
+            // Ignore localStorage write errors
+        }
+    }, [mode, mounted]);
+
     const toggleTheme = () => {
-        const newMode = mode === 'light' ? 'dark' : 'light';
-        setMode(newMode);
-        localStorage.setItem('themeMode', newMode);
+        setMode(prev => prev === 'light' ? 'dark' : 'light');
     };
 
-    const theme = useMemo(
-        () =>
-            createTheme({
-                palette: {
-                    mode,
-                    ...(mode === 'dark'
-                        ? {
-                            // Dark Mode Overrides
-                            background: {
-                                default: '#121212',
-                                paper: '#1e1e1e',
-                            },
-                            primary: {
-                                main: '#90caf9',
-                            },
-                        }
-                        : {
-                            // Light Mode Overrides
-                            background: {
-                                default: '#f5f5f5',
-                                paper: '#ffffff',
-                            },
-                            primary: {
-                                main: '#1976d2',
-                            },
-                        }),
-                },
-                components: {
-                    MuiOutlinedInput: {
-                        styleOverrides: {
-                            root: {
-                                backgroundColor: mode === 'dark' ? '#2c2c2c' : undefined,
-                            },
-                            input: {
-                                '&:-webkit-autofill': {
-                                    WebkitBoxShadow: mode === 'dark' ? '0 0 0 100px #2c2c2c inset' : undefined,
-                                    WebkitTextFillColor: mode === 'dark' ? '#ffffff' : undefined,
-                                }
-                            }
-                        }
-                    },
-                    MuiInputBase: {
-                        styleOverrides: {
-                            input: {
-                                color: mode === 'dark' ? '#fff' : undefined,
-                            }
-                        }
-                    }
-                }
-            }),
-        [mode]
-    );
+    // Avoid hydration mismatch by rendering nothing strictly if theme matters for initial render, 
+    // but for just class injection, it's fine. 
+    // However, to be safe and avoid flash of wrong theme if we had ssr:
+    if (!mounted) {
+        // Optional: return null or a loader if strict consistency is needed
+        // For now, we render children to not block paint, but effect will update class mostly immediately on client
+    }
 
     return (
         <ThemeContext.Provider value={{ mode, toggleTheme }}>
-            <MuiThemeProvider theme={theme}>
-                <CssBaseline />
-                {children}
-            </MuiThemeProvider>
+            {children}
         </ThemeContext.Provider>
     );
 };

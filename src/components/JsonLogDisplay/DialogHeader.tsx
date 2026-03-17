@@ -1,26 +1,28 @@
 import React from 'react';
-import { DialogTitle, Typography, Chip } from '@mui/material';
-import { Error as ErrorIcon } from '@mui/icons-material';
-import styles from './JsonLogDisplay.module.css';
+import { DialogHeader as ShadcnDialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle } from "lucide-react";
 
 const DialogHeader = React.memo(() => {
   return (
-    <DialogTitle className={styles.dialogTitle}>
-      <ErrorIcon color="error" />
-      <Typography variant="h6" component="span">
-        Restore Operation Issues
-      </Typography>
-      <Chip 
-        label="Error" 
-        color="error"
-        size="small"
-        className={styles.errorChip}
-      />
-    </DialogTitle>
+    <ShadcnDialogHeader className="bg-destructive/5 p-6 pr-14 border-b border-destructive/10">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-destructive/10 rounded-lg">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+          </div>
+          <DialogTitle className="text-xl font-extrabold uppercase tracking-tight text-destructive">
+            Restoration Anomalies
+          </DialogTitle>
+        </div>
+        <Badge variant="destructive" className="h-6 px-3 text-[10px] font-extrabold uppercase tracking-widest shadow-lg shadow-destructive/20">
+          ACTION REQUIRED
+        </Badge>
+      </div>
+    </ShadcnDialogHeader>
   );
 });
 
 DialogHeader.displayName = 'DialogHeader';
 
 export default DialogHeader;
-

@@ -21,7 +21,9 @@
     "incremental": true,
     "module": "ESNext",
     "types": [
-      "node"
+      "node",
+      "jest",
+      "@testing-library/jest-dom"
     ],
     "baseUrl": ".",
     "paths": {
@@ -33,12 +35,19 @@
   "include": [
     "next-env.d.ts",
     "src/**/*.ts",
-    "src/**/*.tsx"
+    "src/**/*.tsx",
+    "jest.setup.js"
   ],
   "exclude": [
     "node_modules",
     ".next",
     "out",
-    "build"
+    "build",
+    "backups",
+    "coverage",
+    "test-results",
+    "temp",
+    "docker",
+    "scripts"
   ]
 }

@@ -1,11 +1,14 @@
 import React, { useState, useCallback } from 'react';
+import { useRouter } from 'next/router';
 import { useAuth } from '@/context/AuthContext';
 import LoggedInView from './LoggedInView';
 import LoginInProgressView from './LoginInProgressView';
 import LoginFormView from './LoginFormView';
 import { useAuthMessageHandler } from '@/hooks/useAuthMessageHandler';
+import { api } from '@/utils/api';
 
 const ContentfulBrowserAuth = React.memo(() => {
+    const router = useRouter();
     const {
         isLoggedIn,
         isLoading: hookLoading,
@@ -13,7 +16,6 @@ const ContentfulBrowserAuth = React.memo(() => {
         token,
         setToken,
         saveToken,
-        logout,
         checkAuthStatus,
         setAuthUrl
     } = useAuth();
@@ -34,89 +36,39 @@ const ContentfulBrowserAuth = React.memo(() => {
         try {
             await saveToken(token);
             setLoginStarted(false);
+            router.push('/');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save token');
         } finally {
             setLocalLoading(false);
         }
-    }, [token, saveToken]);
+    }, [token, saveToken, router]);
 
-    const handleLogout = useCallback(async () => {
-        setError('');
-        setLocalLoading(true);
 
-        try {
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Logout timed out')), 15000)
-            );
 
-            await Promise.race([
-                logout(),
-                timeoutPromise
-            ]);
 
-            await checkAuthStatus();
-            setLoginStarted(false);
-        } catch (err) {
-            console.error('Error during logout:', err);
-            setError('Logout process timed out. You may need to refresh the page.');
-            await checkAuthStatus();
-        } finally {
-            setLocalLoading(false);
-        }
-    }, [logout, checkAuthStatus]);
-
-    const handleFullReset = useCallback(async () => {
-        setError('');
-        setLocalLoading(true);
-
-        try {
-            const response = await fetch('/api/reset-auth', {
-                method: 'POST',
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.message);
-            }
-
-            await checkAuthStatus();
-            setLoginStarted(false);
-        } catch (err) {
-            console.error('Error during full reset:', err);
-            setError('Reset process failed. Please try again or refresh the page.');
-        } finally {
-            setLocalLoading(false);
-        }
-    }, [checkAuthStatus]);
 
     const getAuthUrl = useCallback(async () => {
         try {
             setError('');
             setLocalLoading(true);
 
-            const response = await fetch('/api/contentful-auth-browser', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ action: 'getAuthUrl' }),
+            const result = await api.post<{ authUrl: string; message?: string }>('/api/contentful-auth-browser', {
+                action: 'getAuthUrl'
             });
 
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to get auth URL');
+            if (!result.success || !result.data?.authUrl) {
+                throw new Error(result.error || result.data?.message || 'Failed to get auth URL');
             }
 
-            if (!data.authUrl || !data.authUrl.startsWith('https://')) {
+            const url = result.data.authUrl;
+            if (!url.startsWith('https://')) {
                 throw new Error('Invalid auth URL received from server');
             }
 
-            setAuthUrl(data.authUrl);
+            setAuthUrl(url);
             setLoginStarted(true);
-            window.open(data.authUrl, '_blank');
+            window.open(url, '_blank');
         } catch (err) {
             console.error('Error getting auth URL:', err);
             setError(err instanceof Error ? err.message : 'Failed to get auth URL');
@@ -161,10 +113,7 @@ const ContentfulBrowserAuth = React.memo(() => {
 
     if (isLoggedIn) {
         return (
-            <LoggedInView
-                onLogout={handleLogout}
-                isLoading={isLoading}
-            />
+            <LoggedInView />
         );
     }
 
@@ -192,6 +141,8 @@ const ContentfulBrowserAuth = React.memo(() => {
             isLoading={isLoading}
         />
     );
+
+
 });
 
 ContentfulBrowserAuth.displayName = 'ContentfulBrowserAuth';

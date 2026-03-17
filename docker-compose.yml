@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: contentful-migration-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adminpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-migration_tool}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: always
+
+  # App service (optional for local dev if running via npm run dev, but good for production)
+  # app:
+  #   build: .
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-adminpassword}@postgres:5432/${POSTGRES_DB:-migration_tool}
+  #   depends_on:
+  #     - postgres

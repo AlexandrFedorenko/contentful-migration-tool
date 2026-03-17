@@ -12,27 +12,21 @@ export const authCache = {
   get(): AuthCacheData {
     try {
       if (fs.existsSync(CACHE_FILE)) {
-        const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-        return data;
+        return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
       }
-    } catch {
-    }
+    } catch { }
     return { status: null, timestamp: 0 };
   },
-  
+
   set(data: AuthCacheData): void {
     try {
       fs.writeFileSync(CACHE_FILE, JSON.stringify(data), 'utf8');
-    } catch {
-    }
+    } catch { }
   },
-  
+
   reset(): void {
     try {
-      if (fs.existsSync(CACHE_FILE)) {
-        fs.unlinkSync(CACHE_FILE);
-      }
-    } catch {
-    }
+      fs.rmSync(CACHE_FILE, { force: true });
+    } catch { }
   }
-}; 
+};

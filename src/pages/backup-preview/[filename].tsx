@@ -1,80 +1,79 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-    Container,
-    Typography,
-    Box,
-    Paper,
-    CircularProgress,
-    Tabs,
-    Tab,
-    Grid,
-    Card,
-    CardContent,
-    List,
-    ListItem,
-    ListItemText,
-    Divider,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
-    TextField,
-    InputAdornment,
-    Chip,
-    Checkbox,
-    FormControlLabel,
-    Button,
-    AppBar,
-    Toolbar,
     Dialog,
-    DialogTitle,
     DialogContent,
-    DialogContentText,
-    DialogActions,
-} from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import SearchIcon from '@mui/icons-material/Search';
-import CodeIcon from '@mui/icons-material/Code';
-import ArticleIcon from '@mui/icons-material/Article';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DashboardIcon from '@mui/icons-material/Dashboard';
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    LayoutDashboard,
+    FileText,
+    Code,
+    Search,
+    ArrowLeft,
+    Loader2,
+    AlertTriangle,
+    CheckCircle2,
+    Database,
+    Layers,
+    Image as ImageIcon,
+    Globe,
 
-interface TabPanelProps {
-    children?: React.ReactNode;
-    index: number;
-    value: number;
+} from "lucide-react";
+import { useGlobalContext } from '@/context/GlobalContext';
+import { useRestore } from '@/hooks/useRestore';
+import { Backup, BackupData, BackupEntry, BackupAsset, BackupContentType, BackupLocale } from '@/types/backup';
+import { cn } from "@/lib/utils";
+import { api } from '@/utils/api';
+import { parseError, instructionToString } from '@/utils/errorParser';
+
+interface RichTextNode {
+    nodeType: string;
+    value?: string;
+    marks?: { type: string }[];
+    content?: RichTextNode[];
+    data?: {
+        target?: {
+            sys?: {
+                id?: string;
+            }
+        }
+    };
 }
 
-function TabPanel(props: TabPanelProps) {
-    const { children, value, index, ...other } = props;
-
-    return (
-        <div
-            role="tabpanel"
-            hidden={value !== index}
-            id={`simple-tabpanel-${index}`}
-            aria-labelledby={`simple-tab-${index}`}
-            {...other}
-        >
-            {value === index && (
-                <Box sx={{ pt: 3, pb: 3 }}>
-                    {children}
-                </Box>
-            )}
-        </div>
-    );
-
-}
-
-
-
-// Helper to get title from an entry
-const getEntryTitle = (entry: any) => {
+// Helper to get title from an entry. Prefer the content type's "displayField" when provided.
+const getEntryTitle = (entry: BackupEntry, contentTypes?: BackupContentType[]) => {
     if (!entry || !entry.fields) return entry?.sys?.id || 'Unknown';
     const fields = entry.fields;
 
-    // 1. Try specific title fields
+    // 0. If we have contentTypes metadata, try to use the configured displayField
+    if (contentTypes && contentTypes.length > 0) {
+        const ct = contentTypes.find(c => c.sys?.id === entry.sys.contentType?.sys?.id);
+        const display = ct?.displayField;
+        if (display) {
+            const val = (fields as Record<string, unknown>)[display];
+            if (val) {
+                if (typeof val === 'object' && val !== null) return Object.values(val)[0] as string;
+                return String(val);
+            }
+        }
+    }
+
+    // 1. Heuristic search for common title-like fields
     const titleField = Object.keys(fields).find(key => {
         const k = key.toLowerCase();
         return k.includes('title') || k.includes('name') || k.includes('label') || k.includes('headline') || k.includes('slug') || k.includes('header');
@@ -88,7 +87,7 @@ const getEntryTitle = (entry: any) => {
         return String(val);
     }
 
-    // 2. Fallback: Try FIRST string field
+    // 2. Fallback to first available string-like field
     for (const key of Object.keys(fields)) {
         const val = fields[key];
         if (typeof val === 'string') return val;
@@ -101,239 +100,110 @@ const getEntryTitle = (entry: any) => {
     return entry.sys.id;
 };
 
-const RichTextRenderer = ({ node, assets, entries }: { node: any, assets: any[], entries: any[] }) => {
+const RichTextRenderer = ({ node, assets, entries, contentTypes }: { node: RichTextNode, assets: BackupAsset[], entries: BackupEntry[], contentTypes?: BackupContentType[] }) => {
     if (node.nodeType === 'text') {
-        return <span style={{ fontWeight: node.marks?.some((m: any) => m.type === 'bold') ? 'bold' : 'normal', fontStyle: node.marks?.some((m: any) => m.type === 'italic') ? 'italic' : 'normal', textDecoration: node.marks?.some((m: any) => m.type === 'underline') ? 'underline' : 'none' }}>{node.value}</span>;
+        const classes = cn(
+            "text-base",
+            node.marks?.some((m) => m.type === 'bold') && "font-bold",
+            node.marks?.some((m) => m.type === 'italic') && "italic",
+            node.marks?.some((m) => m.type === 'underline') && "underline"
+        );
+        return <span className={classes}>{node.value}</span>;
     }
 
     if (node.nodeType === 'paragraph') {
         return (
-            <Typography variant="body2" paragraph>
-                {node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}
-            </Typography>
+            <p className="mb-4 leading-relaxed text-base text-muted-foreground/90">
+                {node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}
+            </p>
         );
     }
 
-    if (node.nodeType === 'heading-1') return <Typography variant="h4" gutterBottom>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</Typography>;
-    if (node.nodeType === 'heading-2') return <Typography variant="h5" gutterBottom>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</Typography>;
-    if (node.nodeType === 'heading-3') return <Typography variant="h6" gutterBottom>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</Typography>;
+    if (node.nodeType === 'heading-1') return <h1 className="text-3xl font-bold mb-4 mt-6">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</h1>;
+    if (node.nodeType === 'heading-2') return <h2 className="text-2xl font-bold mb-3 mt-5">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</h2>;
+    if (node.nodeType === 'heading-3') return <h3 className="text-xl font-bold mb-2 mt-4">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</h3>;
 
     if (node.nodeType === 'embedded-asset-block') {
         const assetId = node.data?.target?.sys?.id;
         const asset = assets?.find(a => a.sys.id === assetId);
         if (asset) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const fileData = Object.values(asset.fields?.file || {})[0] as any;
             if (fileData?.url && fileData.contentType?.startsWith('image/')) {
                 return (
-                    <Box sx={{ my: 2, position: 'relative', width: '100%', height: 300 }}>
+                    <div className="my-4 relative w-full h-64 bg-muted/30 rounded-lg overflow-hidden border border-border/50">
                         <Image
                             src={fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url}
-                            alt={fileData.fileName}
+                            alt={fileData.fileName || 'Asset Image'}
                             fill
-                            style={{ objectFit: 'contain', borderRadius: 4 }}
+                            className="object-contain"
+                            unoptimized
                         />
-                    </Box>
+                    </div>
                 );
             }
+            return (
+                <div className="my-4 p-3 rounded-xl bg-muted/20 dark:bg-white/5 text-xs flex items-center gap-3 border border-dashed border-border/50 max-w-sm">
+                    <FileText className="h-5 w-5 text-muted-foreground/50" />
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                        <span className="font-bold text-foreground truncate">{fileData?.fileName || 'Attachment'}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{fileData?.contentType || 'Unknown Type'}</span>
+                    </div>
+                    {fileData?.details?.size && (
+                        <Badge variant="outline" className="text-[9px] bg-muted/50 border-border/50 shrink-0">
+                            {(fileData.details.size / 1024).toFixed(1)} KB
+                        </Badge>
+                    )}
+                </div>
+            );
         }
-        return <Chip label={`Asset: ${assetId}`} size="small" sx={{ my: 1 }} />;
+        return (
+            <div className="my-4 p-2 rounded-lg bg-muted/20 text-xs flex items-center gap-2 border border-dashed border-border/50 max-w-sm">
+                <ImageIcon className="h-4 w-4 text-muted-foreground/50" />
+                <span className="font-medium text-muted-foreground">Asset ID: <span className="font-mono opacity-70">{assetId}</span></span>
+                <Badge variant="outline" className="text-[9px] ml-auto border-dashed opacity-50">Attachment</Badge>
+            </div>
+        );
     }
 
     if (node.nodeType === 'embedded-entry-block' || node.nodeType === 'embedded-entry-inline') {
         const entryId = node.data?.target?.sys?.id;
         const entry = entries?.find(e => e.sys.id === entryId);
-        const title = entry ? getEntryTitle(entry) : entryId;
-        // Ensure Name first then ID
+        const title = entry ? getEntryTitle(entry, contentTypes) : entryId;
         const label = title === entryId ? `ID: ${entryId}` : `${title} (ID: ${entryId})`;
-        return <Chip label={label} size="small" variant="outlined" sx={{ my: 0.5, mr: 0.5 }} />;
+        return <Badge variant="outline" className="my-1 mr-1 text-xs">{label}</Badge>;
     }
 
-    if (node.nodeType === 'unordered-list') {
-        return <ul>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</ul>;
-    }
-    if (node.nodeType === 'ordered-list') {
-        return <ol>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</ol>;
-    }
-    if (node.nodeType === 'list-item') {
-        return <li>{node.content.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}</li>;
-    }
-
-    // Fallback for other nodes
-    return (
-        <Box sx={{ pl: 1 }}>
-            {node.content?.map((child: any, i: number) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} />)}
-        </Box>
-    );
-};
-
-const FieldRenderer = ({ value, assets, entries }: { value: any, assets: any[], entries: any[] }) => {
-    if (!value || typeof value !== 'object') return null;
+    if (node.nodeType === 'unordered-list') return <ul className="list-disc pl-5 mb-4 space-y-1">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</ul>;
+    if (node.nodeType === 'ordered-list') return <ol className="list-decimal pl-5 mb-4 space-y-1">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</ol>;
+    if (node.nodeType === 'list-item') return <li className="text-base text-muted-foreground">{node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}</li>;
 
     return (
-        <Box>
-            {Object.entries(value).map(([locale, content]: [string, any]) => {
-                // Handle Asset Link
-                if (content?.sys?.type === 'Link' && content?.sys?.linkType === 'Asset') {
-                    const asset = assets?.find(a => a.sys.id === content.sys.id);
-                    if (asset) {
-                        // Try to get file url from the same locale, or fallback to first available
-                        const fileData = asset.fields?.file?.[locale] || Object.values(asset.fields?.file || {})[0];
-                        if (fileData?.url) {
-                            const isImage = fileData.contentType?.startsWith('image/');
-                            return (
-                                <Box key={locale} sx={{ mb: 1 }}>
-                                    <Typography variant="caption" color="textSecondary" display="block">
-                                        {locale}
-                                    </Typography>
-                                    {isImage ? (
-                                        <Box
-                                            component="img"
-                                            src={fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url}
-                                            alt={fileData.fileName}
-                                            sx={{ maxWidth: '100%', maxHeight: 200, borderRadius: 1, border: '1px solid #eee' }}
-                                        />
-                                    ) : (
-                                        <Typography variant="body2">
-                                            File: {fileData.fileName} ({fileData.contentType})
-                                        </Typography>
-                                    )}
-                                </Box>
-                            );
-                        }
-                    }
-                    return (
-                        <Box key={locale} sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="textSecondary" display="block">
-                                {locale}
-                            </Typography>
-                            <Typography variant="body2" color="error">
-                                Asset not found (ID: {content.sys.id})
-                            </Typography>
-                        </Box>
-                    );
-                }
-
-                // Handle Entry Link
-                if (content?.sys?.type === 'Link' && content?.sys?.linkType === 'Entry') {
-                    const entry = entries?.find(e => e.sys.id === content.sys.id);
-                    const title = entry ? getEntryTitle(entry) : content.sys.id;
-                    // Ensure Name first then ID
-                    const label = title === content.sys.id ? `ID: ${content.sys.id}` : `${title} (ID: ${content.sys.id})`;
-                    return (
-                        <Box key={locale} sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="textSecondary" display="block">
-                                {locale}
-                            </Typography>
-                            <Chip label={label} size="small" variant="outlined" />
-                        </Box>
-                    );
-                }
-
-                // Handle Rich Text
-                if (content?.nodeType === 'document') {
-                    return (
-                        <Box key={locale} sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="textSecondary" display="block">
-                                {locale}
-                            </Typography>
-                            <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
-                                <RichTextRenderer node={content} assets={assets} entries={entries} />
-                            </Paper>
-                        </Box>
-                    );
-                }
-
-                // Handle Array of Links (e.g. Gallery)
-                if (Array.isArray(content)) {
-                    return (
-                        <Box key={locale} sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="textSecondary" display="block">
-                                {locale}
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                {content.map((item: any, idx: number) => {
-                                    if (item?.sys?.type === 'Link' && item?.sys?.linkType === 'Asset') {
-                                        const asset = assets?.find(a => a.sys.id === item.sys.id);
-                                        const fileData = asset?.fields?.file?.[locale] || Object.values(asset?.fields?.file || {})[0];
-                                        if (fileData?.url && fileData.contentType?.startsWith('image/')) {
-                                            return (
-                                                <Box
-                                                    key={idx}
-                                                    component="img"
-                                                    src={fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url}
-                                                    alt={fileData.fileName}
-                                                    sx={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 1, border: '1px solid #eee' }}
-                                                />
-                                            );
-                                        }
-                                    }
-                                    if (item?.sys?.type === 'Link' && item?.sys?.linkType === 'Entry') {
-                                        const entry = entries?.find(e => e.sys.id === item.sys.id);
-                                        const title = entry ? getEntryTitle(entry) : item.sys.id;
-                                        // Ensure Name first then ID
-                                        const label = title === item.sys.id ? `ID: ${item.sys.id}` : `${title} (ID: ${item.sys.id})`;
-                                        return <Chip key={idx} label={label} size="small" variant="outlined" />;
-                                    }
-                                    return (
-                                        <Box key={idx} sx={{ p: 0.5, border: '1px solid #eee', borderRadius: 1 }}>
-                                            <Typography variant="caption">{JSON.stringify(item)}</Typography>
-                                        </Box>
-                                    );
-                                })}
-                            </Box>
-                        </Box>
-                    );
-                }
-
-                // Handle Text/Primitives/Objects
-                let displayValue = String(content);
-                let isObject = false;
-                if (typeof content === 'object' && content !== null) {
-                    displayValue = JSON.stringify(content, null, 2);
-                    isObject = true;
-                }
-
-                return (
-                    <Box key={locale} sx={{ mb: 1 }}>
-                        <Typography variant="caption" color="textSecondary" display="block">
-                            {locale}
-                        </Typography>
-                        {isObject ? (
-                            <pre style={{ margin: 0, fontSize: '0.8rem', overflow: 'auto', maxHeight: 200, background: 'rgba(0,0,0,0.05)', padding: '8px', borderRadius: '4px', color: 'text.primary' }}>
-                                {displayValue}
-                            </pre>
-                        ) : (
-                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'text.primary' }}>
-                                {displayValue}
-                            </Typography>
-                        )}
-                    </Box>
-                );
-            })}
-        </Box>
+        <div className="pl-2 border-l-2 border-primary/20">
+            {node.content?.map((child, i) => <RichTextRenderer key={i} node={child} assets={assets} entries={entries} contentTypes={contentTypes} />)}
+        </div>
     );
 };
 
 export default function BackupPreview() {
     const router = useRouter();
     const { filename } = router.query;
+    const { dispatch } = useGlobalContext();
+    const { handleRestore } = useRestore();
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [backupData, setBackupData] = useState<any>(null);
-    const [tabValue, setTabValue] = useState(0);
+    const [backupData, setBackupData] = useState<BackupData | null>(null);
     const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Selective Restore State
     const [selectedLocales, setSelectedLocales] = useState<Set<string>>(new Set());
     const [selectedContentTypes, setSelectedContentTypes] = useState<Set<string>>(new Set());
     const [isRestoring, setIsRestoring] = useState(false);
 
-    // Restore Dialog State
     const [openRestoreDialog, setOpenRestoreDialog] = useState(false);
     const [clearEnvironment, setClearEnvironment] = useState(false);
     const [restoreError, setRestoreError] = useState<string | null>(null);
-    const [restoreSuccess, setRestoreSuccess] = useState(false);
 
     useEffect(() => {
         if (!router.isReady) return;
@@ -341,39 +211,30 @@ export default function BackupPreview() {
         const fetchBackupContent = async () => {
             try {
                 const spaceId = new URLSearchParams(window.location.search).get('spaceId');
-                if (!spaceId || !filename) {
-                    throw new Error('Missing spaceId or filename');
-                }
+                if (!spaceId || !filename) throw new Error('Missing spaceId or filename');
 
                 let data;
-
-                // Check if this is a temporary preview file
                 if (typeof filename === 'string' && filename.startsWith('temp-preview-')) {
                     const storageKey = `temp-backup-${spaceId}-${filename}`;
                     const { getTempBackup } = await import('@/utils/largeFileStorage');
                     const fileContent = await getTempBackup(storageKey);
-
-                    if (!fileContent) {
-                        throw new Error('Temporary backup file not found or expired');
-                    }
+                    if (!fileContent) throw new Error('Temporary backup file not found or expired');
                     data = JSON.parse(fileContent);
                 } else {
-                    // Normal API fetch
-                    const response = await fetch(`/api/backup-content?spaceId=${spaceId}&filename=${filename}`);
-                    if (!response.ok) {
-                        throw new Error('Failed to load backup content');
+                    const result = await api.get<any>(`/api/backup-content?spaceId=${spaceId}&filename=${filename}`);
+                    if (result.success && result.data) {
+                        data = result.data;
+                    } else {
+                        throw new Error(result.error || 'Failed to load backup content');
                     }
-                    data = await response.json();
                 }
 
                 setBackupData(data);
 
-                // Set initial selected content type if available
                 if (data.contentTypes && data.contentTypes.length > 0) {
                     setSelectedContentType(data.contentTypes[0].sys.id);
                 }
 
-                // Initialize selections from localStorage or default to all
                 const storageKey = `backup-selection-${spaceId}-${filename}`;
                 const savedSelection = localStorage.getItem(storageKey);
 
@@ -383,17 +244,16 @@ export default function BackupPreview() {
                         setSelectedLocales(new Set(parsed.locales || []));
                         setSelectedContentTypes(new Set(parsed.contentTypes || []));
                     } catch {
-                        // If parsing fails, default to all
-                        setSelectedLocales(new Set(data.locales?.map((l: any) => l.code) || []));
-                        setSelectedContentTypes(new Set(data.contentTypes?.map((ct: any) => ct.sys.id) || []));
+                        setSelectedLocales(new Set(data.locales?.map((l: BackupLocale) => l.code) || []));
+                        setSelectedContentTypes(new Set(data.contentTypes?.map((ct: BackupContentType) => ct.sys.id) || []));
                     }
                 } else {
-                    // Default to all selected
-                    setSelectedLocales(new Set(data.locales?.map((l: any) => l.code) || []));
-                    setSelectedContentTypes(new Set(data.contentTypes?.map((ct: any) => ct.sys.id) || []));
+                    setSelectedLocales(new Set(data.locales?.map((l: BackupLocale) => l.code) || []));
+                    setSelectedContentTypes(new Set(data.contentTypes?.map((ct: BackupContentType) => ct.sys.id) || []));
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Unknown error');
+                const instruction = parseError(err instanceof Error ? err.message : 'Unknown error');
+                setError(instructionToString(instruction));
             } finally {
                 setLoading(false);
             }
@@ -414,14 +274,12 @@ export default function BackupPreview() {
 
     const entriesByContentType = useMemo(() => {
         if (!backupData?.entries) return {};
-        const grouped: Record<string, any[]> = {};
-
-        backupData.entries.forEach((entry: any) => {
+        const grouped: Record<string, BackupEntry[]> = {};
+        backupData.entries.forEach((entry: BackupEntry) => {
             const ctId = entry.sys.contentType.sys.id;
             if (!grouped[ctId]) grouped[ctId] = [];
             grouped[ctId].push(entry);
         });
-
         return grouped;
     }, [backupData]);
 
@@ -433,28 +291,18 @@ export default function BackupPreview() {
     const filteredContentTypes = useMemo(() => {
         if (!backupData?.contentTypes) return [];
         if (!searchTerm) return backupData.contentTypes;
-
         const lowerSearch = searchTerm.toLowerCase();
-        return backupData.contentTypes.filter((ct: any) =>
-            ct.name.toLowerCase().includes(lowerSearch) ||
+        return backupData.contentTypes.filter((ct: BackupContentType) =>
+            (ct.name as string).toLowerCase().includes(lowerSearch) ||
             ct.sys.id.toLowerCase().includes(lowerSearch)
         );
     }, [backupData, searchTerm]);
 
-    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-        setTabValue(newValue);
-    };
-
-
-    // Selective Restore Handlers
     const handleLocaleToggle = (localeCode: string) => {
         setSelectedLocales(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(localeCode)) {
-                newSet.delete(localeCode);
-            } else {
-                newSet.add(localeCode);
-            }
+            if (newSet.has(localeCode)) newSet.delete(localeCode);
+            else newSet.add(localeCode);
             return newSet;
         });
     };
@@ -462,50 +310,24 @@ export default function BackupPreview() {
     const handleContentTypeToggle = (contentTypeId: string) => {
         setSelectedContentTypes(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(contentTypeId)) {
-                newSet.delete(contentTypeId);
-            } else {
-                newSet.add(contentTypeId);
-            }
+            if (newSet.has(contentTypeId)) newSet.delete(contentTypeId);
+            else newSet.add(contentTypeId);
             return newSet;
         });
     };
 
     const handleSelectAllLocales = (checked: boolean) => {
-        if (checked) {
-            setSelectedLocales(new Set(backupData?.locales?.map((l: any) => l.code) || []));
-        } else {
-            setSelectedLocales(new Set());
-        }
+        if (checked) setSelectedLocales(new Set(backupData?.locales?.map((l: BackupLocale) => l.code) || []));
+        else setSelectedLocales(new Set());
     };
 
     const handleSelectAllContentTypes = (checked: boolean) => {
-        if (checked) {
-            setSelectedContentTypes(new Set(backupData?.contentTypes?.map((ct: any) => ct.sys.id) || []));
-        } else {
-            setSelectedContentTypes(new Set());
-        }
-    };
-
-    const handleSaveSelection = () => {
-        const spaceId = new URLSearchParams(window.location.search).get('spaceId');
-        if (!spaceId || !filename) return;
-
-        const storageKey = `backup-selection-${spaceId}-${filename}`;
-        const selection = {
-            locales: Array.from(selectedLocales),
-            contentTypes: Array.from(selectedContentTypes)
-        };
-
-        localStorage.setItem(storageKey, JSON.stringify(selection));
-        alert('Selection saved!');
+        if (checked) setSelectedContentTypes(new Set(backupData?.contentTypes?.map((ct: BackupContentType) => ct.sys.id) || []));
+        else setSelectedContentTypes(new Set());
     };
 
     const handleRestoreClick = () => {
-        if (selectedLocales.size === 0 || selectedContentTypes.size === 0) {
-            alert('Please select at least one locale and one content type');
-            return;
-        }
+        if (selectedLocales.size === 0 || selectedContentTypes.size === 0) return;
         setRestoreError(null);
         setOpenRestoreDialog(true);
     };
@@ -516,49 +338,26 @@ export default function BackupPreview() {
 
         if (!spaceId || !filename) return;
 
+        dispatch({ type: "SET_DATA", payload: { selectedTarget: targetEnv } });
         setIsRestoring(true);
         setRestoreError(null);
 
         try {
-            let fileContent = null;
+            const backupObj: Backup = {
+                id: (typeof filename === 'string' && !filename.startsWith('temp-preview-')) ? filename : undefined,
+                name: typeof filename === 'string' ? filename : 'backup',
+                time: Date.now(),
+                path: ''
+            };
 
-            // If it's a temporary file, read content from IndexedDB
-            if (typeof filename === 'string' && filename.startsWith('temp-preview-')) {
-                const storageKey = `temp-backup-${spaceId}-${filename}`;
-                const { getTempBackup } = await import('@/utils/largeFileStorage');
-                const storedContent = await getTempBackup(storageKey);
+            const options = {
+                locales: Array.from(selectedLocales),
+                contentTypes: Array.from(selectedContentTypes),
+                clearEnvironment: clearEnvironment
+            };
 
-                if (storedContent) {
-                    fileContent = JSON.parse(storedContent);
-                }
-            }
-
-            const response = await fetch('/api/restore', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    spaceId,
-                    fileName: filename,
-                    targetEnvironment: targetEnv,
-                    fileContent, // Send content if available (fixes "File not found")
-                    clearEnvironment, // Send clear flag
-                    options: {
-                        locales: Array.from(selectedLocales),
-                        contentTypes: Array.from(selectedContentTypes)
-                    }
-                }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setOpenRestoreDialog(false);
-                setRestoreSuccess(true);
-            } else {
-                throw new Error(data.error || 'Restore failed');
-            }
+            await handleRestore(backupObj, options, backupData, targetEnv);
+            setOpenRestoreDialog(false);
         } catch (error) {
             setRestoreError(error instanceof Error ? error.message : 'Unknown error');
         } finally {
@@ -566,361 +365,478 @@ export default function BackupPreview() {
         }
     };
 
-    const handleCloseSuccess = () => {
-        setRestoreSuccess(false);
-    };
-
     if (loading) {
         return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-                <CircularProgress />
-            </Box>
+            <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+                <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Decoding Archives...</p>
+            </div>
         );
     }
 
     if (error) {
         return (
-            <Container maxWidth="lg" sx={{ py: 4 }}>
-                <Typography color="error" variant="h5">Error: {error}</Typography>
-            </Container>
+            <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+                <AlertTriangle className="h-12 w-12 text-destructive" />
+                <p className="text-sm font-bold text-destructive">{error}</p>
+                <Button onClick={() => router.back()} variant="outline">Go Back</Button>
+            </div>
         );
     }
 
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
-            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Button
-                    startIcon={<ArrowBackIcon />}
-                    onClick={() => router.back()}
-                    variant="outlined"
-                    sx={{ mr: 2 }}
-                >
-                    Back
-                </Button>
-                <Typography variant="h4" component="h1">
-                    Backup Preview: {filename}
-                </Typography>
-            </Box>
-
-            <Paper sx={{ width: '100%', mb: 2 }}>
-                <Tabs value={tabValue} onChange={handleTabChange} aria-label="backup preview tabs">
-                    <Tab icon={<DashboardIcon />} label="Overview" />
-                    <Tab icon={<ArticleIcon />} label="Content Browser" />
-                    <Tab icon={<CodeIcon />} label="Raw JSON" />
-                </Tabs>
-            </Paper>
-
-            <TabPanel value={tabValue} index={0}>
-                <Grid container spacing={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Content Types</Typography>
-                                <Typography variant="h3">{stats?.contentTypes}</Typography>
-                                <Typography variant="caption" color="primary">
-                                    {selectedContentTypes.size} selected
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Entries</Typography>
-                                <Typography variant="h3">{stats?.entries}</Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Assets</Typography>
-                                <Typography variant="h3">{stats?.assets}</Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Locales</Typography>
-                                <Typography variant="h3">{stats?.locales}</Typography>
-                                <Typography variant="caption" color="primary">
-                                    {selectedLocales.size} selected
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* Locales Selection - Only for Custom Backups */}
-                    {router.query.targetEnv && (
-                        <Grid item xs={12}>
-                            <Paper sx={{ p: 2 }}>
-                                <Typography variant="h6" gutterBottom>
-                                    Select Locales to Restore
-                                </Typography>
-                                <Box sx={{ mb: 2 }}>
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={backupData?.locales?.length > 0 && selectedLocales.size === backupData?.locales?.length}
-                                                indeterminate={selectedLocales.size > 0 && selectedLocales.size < (backupData?.locales?.length || 0)}
-                                                onChange={(e) => handleSelectAllLocales(e.target.checked)}
-                                                color="primary"
-                                            />
-                                        }
-                                        label="Select All Locales"
-                                    />
-                                </Box>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                                    {backupData?.locales?.map((locale: any) => (
-                                        <FormControlLabel
-                                            key={locale.code}
-                                            control={
-                                                <Checkbox
-                                                    checked={selectedLocales.has(locale.code)}
-                                                    onChange={() => handleLocaleToggle(locale.code)}
-                                                    color="primary"
-                                                />
-                                            }
-                                            label={`${locale.name} (${locale.code})`}
-                                        />
-                                    ))}
-                                </Box>
-                            </Paper>
-                        </Grid>
-                    )}
-                </Grid>
-            </TabPanel>
-
-            <TabPanel value={tabValue} index={1}>
-                <Grid container spacing={3}>
-                    <Grid item xs={12} md={3}>
-                        <Paper sx={{ height: 'calc(100vh - 300px)', overflow: 'auto' }}>
-                            <List component="nav">
-                                {router.query.targetEnv && (
-                                    <>
-                                        <Box sx={{ p: 1, pb: 0 }}>
-                                            <TextField
-                                                fullWidth
-                                                size="small"
-                                                variant="outlined"
-                                                placeholder="Search types..."
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                InputProps={{
-                                                    startAdornment: (
-                                                        <InputAdornment position="start">
-                                                            <SearchIcon fontSize="small" />
-                                                        </InputAdornment>
-                                                    ),
-                                                }}
-                                                sx={{ mb: 1 }}
-                                            />
-                                        </Box>
-                                        <ListItem>
-                                            <Checkbox
-                                                checked={backupData?.contentTypes?.length > 0 && selectedContentTypes.size === backupData?.contentTypes?.length}
-                                                indeterminate={selectedContentTypes.size > 0 && selectedContentTypes.size < (backupData?.contentTypes?.length || 0)}
-                                                onChange={(e) => handleSelectAllContentTypes(e.target.checked)}
-                                                color="primary"
-                                                size="small"
-                                                sx={{ mr: 1 }}
-                                            />
-                                            <ListItemText primary="Select All" />
-                                        </ListItem>
-                                        <Divider />
-                                    </>
-                                )}
-                                {filteredContentTypes.map((ct: any) => (
-                                    <React.Fragment key={ct.sys.id}>
-                                        <ListItem
-                                            button
-                                            selected={selectedContentType === ct.sys.id}
-                                            onClick={() => setSelectedContentType(ct.sys.id)}
-                                        >
-                                            {router.query.targetEnv && (
-                                                <Checkbox
-                                                    checked={selectedContentTypes.has(ct.sys.id)}
-                                                    onChange={(e) => {
-                                                        e.stopPropagation();
-                                                        handleContentTypeToggle(ct.sys.id);
-                                                    }}
-                                                    color="primary"
-                                                    size="small"
-                                                    sx={{ mr: 1 }}
-                                                />
-                                            )}
-                                            <ListItemText
-                                                primary={ct.name}
-                                                secondary={`${entriesByContentType[ct.sys.id]?.length || 0} entries`}
-                                            />
-                                        </ListItem>
-                                        <Divider />
-                                    </React.Fragment>
-                                ))}
-                            </List>
-                        </Paper>
-                    </Grid>
-                    <Grid item xs={12} md={9}>
-
-                        <Paper sx={{ height: 'calc(100vh - 300px)', overflow: 'auto', p: 2 }}>
-                            {filteredEntries.map((entry: any) => (
-                                <Accordion key={entry.sys.id}>
-                                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                        <Typography sx={{ width: '60%', flexShrink: 0, fontWeight: 'medium' }}>
-                                            {getEntryTitle(entry)}
-                                        </Typography>
-                                        <Typography sx={{ color: 'text.secondary' }}>
-                                            ID: {entry.sys.id}
-                                        </Typography>
-                                    </AccordionSummary>
-                                    <AccordionDetails>
-                                        <Grid container spacing={2}>
-                                            {Object.entries(entry.fields).map(([fieldName, fieldValue]: [string, any]) => (
-                                                <Grid item xs={12} key={fieldName}>
-                                                    <Paper variant="outlined" sx={{ p: 2 }}>
-                                                        <Typography variant="subtitle2" color="primary" gutterBottom>
-                                                            {fieldName}
-                                                        </Typography>
-                                                        <FieldRenderer
-                                                            value={fieldValue}
-                                                            assets={backupData?.assets || []}
-                                                            entries={backupData?.entries || []}
-                                                        />
-                                                    </Paper>
-                                                </Grid>
-                                            ))}
-                                        </Grid>
-                                    </AccordionDetails>
-                                </Accordion>
-                            ))}
-                            {filteredEntries.length === 0 && (
-                                <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 4 }}>
-                                    No entries found
-                                </Typography>
-                            )}
-                        </Paper>
-                    </Grid>
-                </Grid>
-            </TabPanel>
-
-            <TabPanel value={tabValue} index={2}>
-                <Paper sx={{ p: 2, maxHeight: '80vh', overflow: 'auto' }}>
-                    <pre>{JSON.stringify(backupData, null, 2)}</pre>
-                </Paper>
-            </TabPanel>
-
-            {/* Action Bar - Only for Custom Backups */}
-            {router.query.targetEnv && (
-                <AppBar position="fixed" color="inherit" sx={{ top: 'auto', bottom: 0, boxShadow: 3, bgcolor: 'background.paper' }}>
-                    <Toolbar>
-                        <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Typography variant="body2" color="text.secondary">
-                                Target Environment: <strong>{new URLSearchParams(window.location.search).get('targetEnv') || 'Unknown'}</strong>
-                            </Typography>
-                            <Divider orientation="vertical" flexItem />
-                            <Typography variant="body2" color="text.secondary">
-                                Selected: {selectedLocales.size} locale(s), {selectedContentTypes.size} content type(s)
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 2 }}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={handleRestoreClick}
-                                disabled={isRestoring || selectedLocales.size === 0 || selectedContentTypes.size === 0}
-                                startIcon={isRestoring ? <CircularProgress size={20} color="inherit" /> : null}
-                            >
-                                {isRestoring ? 'Restoring...' : 'Restore Selected'}
-                            </Button>
-                        </Box>
-                    </Toolbar>
-                </AppBar>
-            )}
-
-            {/* Add padding to bottom to prevent content from being hidden by fixed AppBar */}
-            <Box sx={{ pb: 10 }} />
-
-            {/* Restore Confirmation Dialog */}
-            <Dialog
-                open={openRestoreDialog}
-                onClose={() => setOpenRestoreDialog(false)}
-                aria-labelledby="restore-dialog-title"
-                aria-describedby="restore-dialog-description"
-            >
-                <DialogTitle id="restore-dialog-title">
-                    Confirm Restore
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText id="restore-dialog-description" sx={{ mb: 2 }}>
-                        You are about to restore <strong>{selectedLocales.size} locale(s)</strong> and <strong>{selectedContentTypes.size} content type(s)</strong> to environment:
-                        <br />
-                        <strong>{new URLSearchParams(window.location.search).get('targetEnv') || 'Unknown'}</strong>
-                    </DialogContentText>
-
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={clearEnvironment}
-                                    onChange={(e) => setClearEnvironment(e.target.checked)}
-                                    color="error"
-                                />
-                            }
-                            label={
-                                <Typography variant="body2" color="error">
-                                    Clear target environment before restore
-                                </Typography>
-                            }
-                        />
-                        <Typography variant="caption" display="block" color="text.secondary" sx={{ ml: 4 }}>
-                            ⚠️ This will delete ALL entries, assets, and content types in the target environment before restoring.
-                        </Typography>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenRestoreDialog(false)} color="inherit" disabled={isRestoring}>
-                        Cancel
-                    </Button>
+        <div className="max-w-7xl mx-auto p-8 space-y-8 animate-in fade-in duration-500">
+            {/* Header */}
+            <header className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
                     <Button
-                        onClick={handleExecuteRestore}
-                        color={clearEnvironment ? "error" : "primary"}
-                        variant="contained"
-                        autoFocus
-                        disabled={isRestoring}
-                        startIcon={isRestoring ? <CircularProgress size={20} color="inherit" /> : null}
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.back()}
+                        className="gap-2 px-4 rounded-xl hover:bg-muted/10 text-muted-foreground hover:text-foreground transition-all"
                     >
-                        {isRestoring ? 'Restoring...' : (clearEnvironment ? 'Clear & Restore' : 'Restore')}
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="text-xs font-black uppercase tracking-widest">Back</span>
                     </Button>
-                </DialogActions>
-            </Dialog>
+                    <div className="h-8 w-[1px] bg-border/50" />
+                    <div>
+                        <h1 className="text-3xl font-black uppercase tracking-tight text-foreground flex items-center gap-2">
+                            Preview <span className="text-primary italic opacity-50">{filename}</span>
+                        </h1>
+                        <p className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground">Archive Contents Analysis</p>
+                    </div>
+                </div>
+                {router.query.targetEnv && (
+                    <Button
+                        onClick={handleRestoreClick}
+                        disabled={isRestoring || selectedLocales.size === 0 || selectedContentTypes.size === 0}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+                    >
+                        {isRestoring ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                        Execute Restore
+                    </Button>
+                )}
+            </header>
 
-            {/* Success Dialog */}
-            <Dialog
-                open={restoreSuccess}
-                onClose={handleCloseSuccess}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle sx={{ textAlign: 'center', pt: 4 }}>
-                    <Box sx={{ color: 'success.main', mb: 2 }}>
-                        <svg style={{ width: 64, height: 64 }} viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                        </svg>
-                    </Box>
-                    Restore Successful!
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText align="center">
-                        The content has been successfully restored to the <strong>{new URLSearchParams(window.location.search).get('targetEnv')}</strong> environment.
-                    </DialogContentText>
+            <Tabs defaultValue="overview" className="space-y-6">
+                <TabsList className="bg-muted/30 border border-border/50 p-1 rounded-xl w-full justify-start h-auto">
+                    <TabsTrigger value="overview" className="gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold uppercase tracking-wider text-sm">
+                        <LayoutDashboard className="h-4 w-4" /> Overview
+                    </TabsTrigger>
+                    <TabsTrigger value="content" className="gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold uppercase tracking-wider text-sm">
+                        <FileText className="h-4 w-4" /> Content Browser
+                    </TabsTrigger>
+                    <TabsTrigger value="json" className="gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold uppercase tracking-wider text-sm">
+                        <Code className="h-4 w-4" /> Raw JSON
+                    </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="space-y-6 animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="grid grid-cols-12 gap-6">
+                        {[
+                            { label: 'Content Types', value: stats?.contentTypes, icon: Layers, sub: `${selectedContentTypes.size} selected` },
+                            { label: 'Entries', value: stats?.entries, icon: Database },
+                            { label: 'Assets', value: stats?.assets, icon: ImageIcon },
+                            { label: 'Locales', value: stats?.locales, icon: Globe, sub: `${selectedLocales.size} selected` }
+                        ].map((stat, i) => (
+                            <Card key={i} className="col-span-12 sm:col-span-6 md:col-span-3 bg-card border-border/50 shadow-xl">
+                                <CardContent className="p-6 flex flex-col items-center text-center space-y-2">
+                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                                        <stat.icon className="h-5 w-5" />
+                                    </div>
+                                    <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{stat.label}</span>
+                                    <span className="text-4xl font-black tracking-tighter">{stat.value}</span>
+                                    {stat.sub && <span className="text-[10px] font-bold text-primary uppercase tracking-wider bg-primary/5 px-2 py-0.5 rounded-full">{stat.sub}</span>}
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+
+                    {router.query.targetEnv && (
+                        <Card className="bg-card border-border/50 shadow-xl">
+                            <CardHeader className="py-4 px-6 border-b border-border/50 bg-muted/20">
+                                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                    <Globe className="h-4 w-4 text-primary" /> Target Locales
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-4">
+                                <div className="flex items-center space-x-2 pb-4 border-b border-border/50">
+                                    <Checkbox
+                                        id="select-all-locales"
+                                        checked={backupData?.locales && backupData.locales.length > 0 && selectedLocales.size === backupData.locales.length}
+                                        onCheckedChange={handleSelectAllLocales}
+                                    />
+                                    <label htmlFor="select-all-locales" className="text-xs font-bold uppercase tracking-widest cursor-pointer">
+                                        Select All Locales
+                                    </label>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {backupData?.locales?.map((locale: BackupLocale) => (
+                                        <div key={locale.code} className="flex items-center space-x-2 p-3 rounded-xl bg-muted/30 border border-border/50">
+                                            <Checkbox
+                                                id={`locale-${locale.code}`}
+                                                checked={selectedLocales.has(locale.code)}
+                                                onCheckedChange={() => handleLocaleToggle(locale.code)}
+                                            />
+                                            <label htmlFor={`locale-${locale.code}`} className="text-sm font-mono font-medium cursor-pointer flex-1">
+                                                {locale.name} <span className="opacity-50">({locale.code})</span>
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </TabsContent>
+
+                <TabsContent value="content" className="h-[calc(100vh-300px)] min-h-[500px]">
+                    <div className="grid grid-cols-12 gap-6 h-full">
+                        {/* Sidebar */}
+                        <Card className="col-span-12 md:col-span-3 bg-card/40 backdrop-blur-xl border-border/50 shadow-xl flex flex-col h-full overflow-hidden">
+                            <div className="p-4 border-b border-border/50 space-y-4 bg-muted/30">
+                                {router.query.targetEnv && (
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+                                        <Input
+                                            placeholder="FILTER_TYPES..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="pl-9 h-9 bg-muted/50 border-border/50 text-xs font-mono tracking-widest"
+                                        />
+                                    </div>
+                                )}
+                                {router.query.targetEnv && (
+                                    <div className="flex items-center space-x-2 px-1">
+                                        <Checkbox
+                                            id="select-all-types"
+                                            checked={backupData?.contentTypes && backupData.contentTypes.length > 0 && selectedContentTypes.size === backupData.contentTypes.length}
+                                            onCheckedChange={handleSelectAllContentTypes}
+                                        />
+                                        <label htmlFor="select-all-types" className="text-xs font-black uppercase tracking-widest cursor-pointer text-muted-foreground">
+                                            Select All Types
+                                        </label>
+                                    </div>
+                                )}
+                            </div>
+                            <ScrollArea className="flex-1">
+                                <div className="flex flex-col p-2 gap-1">
+                                    {filteredContentTypes.map((ct: BackupContentType) => (
+                                        <button
+                                            key={ct.sys.id}
+                                            onClick={() => setSelectedContentType(ct.sys.id)}
+                                            className={cn(
+                                                "flex items-center justify-between p-3 rounded-lg text-left transition-all gap-3",
+                                                selectedContentType === ct.sys.id
+                                                    ? "bg-primary/20 text-primary hover:bg-primary/25"
+                                                    : "hover:bg-muted/10 text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                {router.query.targetEnv && (
+                                                    <Checkbox
+                                                        id={`type-${ct.sys.id}`}
+                                                        checked={selectedContentTypes.has(ct.sys.id)}
+                                                        onCheckedChange={() => handleContentTypeToggle(ct.sys.id)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                    />
+                                                )}
+                                                <div className="flex flex-col overflow-hidden">
+                                                    <span className="text-base font-bold truncate">{ct.name}</span>
+                                                    <span className="text-xs font-mono opacity-50 truncate">{ct.sys.id}</span>
+                                                </div>
+                                            </div>
+                                            <Badge variant="outline" className="text-[9px] bg-muted/50 border-border/50 shrink-0">
+                                                {entriesByContentType[ct.sys.id]?.length || 0}
+                                            </Badge>
+                                        </button>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </Card>
+
+                        {/* Content Area */}
+                        <Card className="col-span-12 md:col-span-9 bg-card border-border/50 shadow-xl flex flex-col h-full overflow-hidden">
+                            <CardHeader className="py-4 px-6 border-b border-border/50 bg-muted/20 flex flex-row items-center justify-between">
+                                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                    <Database className="h-4 w-4 text-primary" />
+                                    {selectedContentType ? (
+                                        <span>Entries: <span className="text-primary">{backupData?.contentTypes?.find((c: BackupContentType) => c.sys.id === selectedContentType)?.name}</span></span>
+                                    ) : 'Select a Type'}
+                                </CardTitle>
+                                <span className="text-xs font-mono text-muted-foreground opacity-50">
+                                    {filteredEntries.length} RECORDS FOUND
+                                </span>
+                            </CardHeader>
+                            <ScrollArea className="flex-1 p-6">
+                                <div className="space-y-4">
+                                    {filteredEntries.map((entry: BackupEntry) => (
+                                        <Accordion key={entry.sys.id} type="multiple" className="w-full">
+                                            <AccordionItem value={entry.sys.id} className="border-0">
+                                                <div className="rounded-xl border border-border/50 bg-muted/30 hover:border-border transition-colors overflow-hidden">
+                                                    <AccordionTrigger className="px-4 py-4 hover:no-underline bg-muted/20 hover:bg-muted/40 transition-colors">
+                                                        <div className="flex flex-1 items-center justify-between mr-4">
+                                                            <div className="flex flex-col text-left">
+                                                                <h4 className="text-base font-bold text-foreground">{getEntryTitle(entry, backupData?.contentTypes)}</h4>
+                                                                <span className="text-xs font-mono text-muted-foreground opacity-50">ID: {entry.sys.id}</span>
+                                                            </div>
+                                                            <Badge variant="secondary" className="text-xs font-bold uppercase tracking-wider bg-muted/60 text-muted-foreground border-border/50 ml-4 shrink-0">
+                                                                Published
+                                                            </Badge>
+                                                        </div>
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="px-6 pb-6 pt-0">
+                                                        <div className="space-y-6 pt-6 border-t border-border/50">
+                                                            {Object.entries(entry.fields || {}).map(([fieldName, fieldContent]: [string, unknown]) => (
+                                                                <div key={fieldName} className="grid grid-cols-12 gap-4 text-base">
+                                                                    <div className="col-span-3 text-xs font-bold uppercase tracking-widest text-muted-foreground pt-1">
+                                                                        {fieldName}
+                                                                    </div>
+                                                                    <div className="col-span-9">
+                                                                        {/* Render field content for each locale */}
+                                                                        {Object.entries(fieldContent as Record<string, unknown>).map(([locale, value]: [string, unknown]) => (
+                                                                            <div key={locale} className="mb-2 last:mb-0">
+                                                                                <span className="text-[11px] font-mono text-primary/50 block mb-1">{locale}</span>
+                                                                                {value && typeof value === 'object' && (value as Record<string, unknown>).nodeType === 'document' ? (
+                                                                                    <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-sm">
+                                                                                        <RichTextRenderer node={value as RichTextNode} assets={backupData?.assets || []} entries={backupData?.entries || []} contentTypes={backupData?.contentTypes || []} />
+                                                                                    </div>
+                                                                                ) : value && typeof value === 'object' && (value as Record<string, unknown>).sys ? (() => {
+                                                                                    const sys = (value as Record<string, unknown>).sys as Record<string, unknown>;
+                                                                                    if (sys.type === 'Link' && sys.linkType === 'Asset') {
+                                                                                        const assetId = sys.id as string;
+                                                                                        const asset = backupData?.assets?.find((a: BackupAsset) => a.sys.id === assetId);
+                                                                                        if (asset) {
+                                                                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                                                            const fileData = Object.values(asset.fields?.file || {})[0] as any;
+                                                                                            const title = Object.values(asset.fields?.title || {})[0] as string || assetId;
+                                                                                            if (fileData?.url && fileData.contentType?.startsWith('image/')) {
+                                                                                                const imgUrl = fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url;
+                                                                                                return (
+                                                                                                    <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden max-w-sm">
+                                                                                                        <div className="relative w-full h-40 bg-muted/40">
+                                                                                                            <Image
+                                                                                                                src={imgUrl}
+                                                                                                                alt={title}
+                                                                                                                fill
+                                                                                                                className="object-contain"
+                                                                                                                unoptimized
+                                                                                                            />
+                                                                                                        </div>
+                                                                                                        <div className="px-3 py-2 border-t border-border/50 flex items-center gap-2">
+                                                                                                            <ImageIcon className="h-3 w-3 text-muted-foreground/50" />
+                                                                                                            <span className="text-[10px] font-medium text-muted-foreground truncate">{title}</span>
+                                                                                                            {fileData.details?.size && (
+                                                                                                                <Badge variant="outline" className="text-[8px] ml-auto h-4 px-1.5 border-border/30">
+                                                                                                                    {(fileData.details.size / 1024).toFixed(1)} KB
+                                                                                                                </Badge>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            }
+                                                                                            return (
+                                                                                                <div className="p-2 rounded-lg bg-muted/30 text-xs flex items-center gap-2">
+                                                                                                    <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                                                                                    <span className="font-medium text-muted-foreground text-[10px]">{title}</span>
+                                                                                                </div>
+                                                                                            );
+                                                                                        }
+                                                                                        return (
+                                                                                            <div className="p-2 rounded-lg bg-muted/30 text-xs flex items-center gap-2 border border-dashed border-border/50">
+                                                                                                <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                                                                                <span className="font-medium text-muted-foreground text-[10px]">Asset: <span className="font-mono opacity-70">{assetId}</span></span>
+                                                                                                <Badge variant="outline" className="text-[9px] ml-auto border-dashed opacity-50 bg-muted/50">Attachment</Badge>
+                                                                                            </div>
+                                                                                        );
+                                                                                    }
+                                                                                    if (sys.type === 'Link' && sys.linkType === 'Entry') {
+                                                                                        const entryId = sys.id as string;
+                                                                                        const linkedEntry = backupData?.entries?.find((e: BackupEntry) => e.sys.id === entryId);
+                                                                                        const entryTitle = linkedEntry ? getEntryTitle(linkedEntry, backupData?.contentTypes) : entryId;
+                                                                                        return (
+                                                                                            <Badge variant="outline" className="text-[10px] gap-1.5 px-2.5 py-1 h-auto bg-muted/30 border-border/50">
+                                                                                                <Layers className="h-3 w-3 text-primary/60" />
+                                                                                                <span className="truncate max-w-[200px]">{entryTitle}</span>
+                                                                                            </Badge>
+                                                                                        );
+                                                                                    }
+                                                                                    return (
+                                                                                        <div className="p-4 rounded-lg bg-muted/30 text-sm text-muted-foreground font-mono break-all leading-relaxed">
+                                                                                            {JSON.stringify(value, null, 2)}
+                                                                                        </div>
+                                                                                    );
+                                                                                })() : Array.isArray(value) ? (() => {
+                                                                                    const items = value as unknown[];
+                                                                                    const hasLinks = items.some((item: unknown) =>
+                                                                                        item && typeof item === 'object' &&
+                                                                                        (item as Record<string, unknown>).sys &&
+                                                                                        ((item as Record<string, unknown>).sys as Record<string, unknown>).type === 'Link'
+                                                                                    );
+                                                                                    if (hasLinks) {
+                                                                                        return (
+                                                                                            <div className="flex flex-wrap gap-2">
+                                                                                                {items.map((item: unknown, idx: number) => {
+                                                                                                    const itemSys = (item as Record<string, unknown>).sys as Record<string, unknown> | undefined;
+                                                                                                    if (itemSys?.linkType === 'Asset') {
+                                                                                                        const assetId = itemSys.id as string;
+                                                                                                        const asset = backupData?.assets?.find((a: BackupAsset) => a.sys.id === assetId);
+                                                                                                        if (asset) {
+                                                                                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                                                                            const fileData = Object.values(asset.fields?.file || {})[0] as any;
+                                                                                                            const title = Object.values(asset.fields?.title || {})[0] as string || assetId;
+                                                                                                            if (fileData?.url && fileData.contentType?.startsWith('image/')) {
+                                                                                                                const imgUrl = fileData.url.startsWith('//') ? `https:${fileData.url}` : fileData.url;
+                                                                                                                return (
+                                                                                                                    <div key={idx} className="rounded-lg border border-border/50 bg-muted/30 overflow-hidden w-32">
+                                                                                                                        <div className="relative w-full h-24 bg-muted/40">
+                                                                                                                            <Image src={imgUrl} alt={title} fill className="object-contain" unoptimized />
+                                                                                                                        </div>
+                                                                                                                        <div className="px-2 py-1 border-t border-border/50">
+                                                                                                                            <span className="text-[9px] text-muted-foreground truncate block">{title}</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                );
+                                                                                                            }
+                                                                                                            return (
+                                                                                                                <div key={idx} className="p-2 rounded-lg bg-muted/30 text-xs flex items-center gap-2">
+                                                                                                                    <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                                                                                                    <span className="font-medium text-muted-foreground text-[10px]">{title}</span>
+                                                                                                                </div>
+                                                                                                            );
+                                                                                                        }
+                                                                                                        return (
+                                                                                                            <div key={idx} className="p-2 rounded-lg bg-muted/30 text-xs flex items-center gap-2 border border-dashed border-border/50">
+                                                                                                                <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                                                                                                <span className="font-medium text-muted-foreground text-[10px]">Asset: <span className="font-mono opacity-70">{assetId}</span></span>
+                                                                                                                <Badge variant="outline" className="text-[9px] ml-auto border-dashed opacity-50 bg-muted/50">Attachment</Badge>
+                                                                                                            </div>
+                                                                                                        );
+                                                                                                    }
+                                                                                                    if (itemSys?.linkType === 'Entry') {
+                                                                                                        const entryId = itemSys.id as string;
+                                                                                                        const linkedEntry = backupData?.entries?.find((e: BackupEntry) => e.sys.id === entryId);
+                                                                                                        const entryTitle = linkedEntry ? getEntryTitle(linkedEntry, backupData?.contentTypes) : entryId;
+                                                                                                        return (
+                                                                                                            <Badge key={idx} variant="outline" className="text-[10px] gap-1.5 px-2.5 py-1 h-auto bg-muted/30 border-border/50">
+                                                                                                                <Layers className="h-3 w-3 text-primary/60" />
+                                                                                                                <span className="truncate max-w-[200px]">{entryTitle}</span>
+                                                                                                            </Badge>
+                                                                                                        );
+                                                                                                    }
+                                                                                                    return (
+                                                                                                        <Badge key={idx} variant="outline" className="text-[10px]">
+                                                                                                            {JSON.stringify(item)}
+                                                                                                        </Badge>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </div>
+                                                                                        );
+                                                                                    }
+                                                                                    return (
+                                                                                        <div className="p-4 rounded-lg bg-muted/30 text-sm text-muted-foreground font-mono break-all leading-relaxed">
+                                                                                            {JSON.stringify(value, null, 2)}
+                                                                                        </div>
+                                                                                    );
+                                                                                })() : (
+                                                                                    <div className="p-4 rounded-lg bg-muted/30 text-sm text-muted-foreground font-mono break-all leading-relaxed">
+                                                                                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </AccordionContent>
+                                                </div>
+                                            </AccordionItem>
+                                        </Accordion>
+                                    ))}
+                                    {filteredEntries.length === 0 && (
+                                        <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                                            <Database className="h-12 w-12 text-muted-foreground mb-4" />
+                                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">No entries found for this type</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </ScrollArea>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="json">
+                    <Card className="bg-card border-border/50 shadow-xl">
+                        <CardHeader className="py-4 px-6 border-b border-border/50 bg-muted/30">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                <Code className="h-4 w-4 text-primary" /> JSON Structure
+                            </CardTitle>
+                        </CardHeader>
+                        <ScrollArea className="h-[600px]">
+                            <pre className="p-6 font-mono text-[11px] leading-relaxed text-emerald-400 selection:bg-emerald-500/20">
+                                {JSON.stringify(backupData, null, 2)}
+                            </pre>
+                        </ScrollArea>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+
+            <Dialog open={openRestoreDialog} onOpenChange={setOpenRestoreDialog}>
+                <DialogContent className="sm:max-w-md bg-card border-border/50 rounded-3xl p-0 overflow-hidden">
+                    <DialogHeader className="p-8 pb-4">
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+                            <CheckCircle2 className="h-6 w-6 text-emerald-500" /> Confirm Restore
+                        </DialogTitle>
+                        <DialogDescription className="text-xs font-medium text-muted-foreground leading-relaxed pt-2">
+                            You are about to restore <span className="text-foreground font-bold">{selectedContentTypes.size}</span> content types and related entries
+                            across <span className="text-foreground font-bold">{selectedLocales.size}</span> locales.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="px-8 space-y-4">
+                        <div className="flex items-top space-x-3 p-4 rounded-xl bg-destructive/5 border border-destructive/20">
+                            <Checkbox
+                                id="clear-env"
+                                checked={clearEnvironment}
+                                onCheckedChange={(checked) => setClearEnvironment(checked as boolean)}
+                                className="mt-1 border-destructive/50 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
+                            />
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="clear-env"
+                                    className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-destructive cursor-pointer"
+                                >
+                                    Purge Environment First?
+                                </label>
+                                <p className="text-[10px] text-destructive/80 font-medium leading-relaxed">
+                                    Warning: This will delete ALL existing content in the target environment before restoring.
+                                </p>
+                            </div>
+                        </div>
+
+                        {restoreError && (
+                            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 shrink-0" />
+                                {restoreError}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="p-8 pt-4 sm:justify-between gap-3">
+                        <Button variant="ghost" onClick={() => setOpenRestoreDialog(false)} className="text-xs font-black uppercase tracking-widest">
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleExecuteRestore}
+                            disabled={isRestoring}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 px-8"
+                        >
+                            {isRestoring ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Confirm Action"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
-                <DialogActions sx={{ justifyContent: 'center', pb: 4 }}>
-                    <Button onClick={handleCloseSuccess} variant="contained" color="primary" size="large">
-                        Awesome!
-                    </Button>
-                </DialogActions>
             </Dialog>
-        </Container>
+        </div>
     );
 }

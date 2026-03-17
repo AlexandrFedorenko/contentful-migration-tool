@@ -1,17 +1,29 @@
 import React, { useCallback } from 'react';
-import { Box, FormControl, InputLabel, Select, MenuItem, Typography, CircularProgress, SelectChangeEvent } from '@mui/material';
 import { useSpaces } from '@/hooks/useSpaces';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useAuth } from '@/context/AuthContext';
-import styles from './SpaceSelector.module.css';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Loader2, AlertCircle, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
-const SpaceSelector = React.memo(() => {
+interface SpaceSelectorProps {
+  size?: 'small' | 'medium';
+  className?: string;
+}
+
+const SpaceSelector = React.memo(({ className }: SpaceSelectorProps) => {
   const { state, dispatch } = useGlobalContext();
   const { spaces, loading, error } = useSpaces();
   const { isLoggedIn } = useAuth();
 
-  const handleChange = useCallback((event: SelectChangeEvent<string>) => {
-    const spaceId = event.target.value as string;
+  const handleValueChange = useCallback((spaceId: string) => {
     dispatch({ type: 'SET_SPACE_ID', payload: spaceId });
     dispatch({ type: 'SET_SOURCE_ENV', payload: '' });
     dispatch({ type: 'SET_TARGET_ENV', payload: '' });
@@ -23,58 +35,61 @@ const SpaceSelector = React.memo(() => {
 
   if (loading) {
     return (
-      <Box className={styles.loadingContainer}>
-        <CircularProgress size={24} className={styles.loadingSpinner} />
-        <Typography>Loading spaces...</Typography>
-      </Box>
+      <div className={cn("flex items-center gap-2 text-muted-foreground", className)}>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">Loading spaces...</span>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box className={styles.errorContainer}>
-        <Typography color="error">
-          Error loading spaces: {error}
-        </Typography>
-      </Box>
+      <Alert variant="destructive" className={className}>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error loading spaces</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
   if (spaces.length === 0) {
     return (
-      <Box className={styles.emptyContainer}>
-        <Typography>
-          No spaces found. Please make sure you have access to at least one space.
-        </Typography>
-      </Box>
+      <Alert className={cn("bg-amber-500/10 border-amber-500/20 text-amber-500", className)}>
+        <Info className="h-4 w-4" />
+        <AlertTitle className="font-bold">No spaces found</AlertTitle>
+        <AlertDescription className="text-xs">
+          Your token is valid but doesn't have access to any spaces.
+          Verify your token in <strong>Profile & Settings</strong>.
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <Box className={styles.container}>
-      <FormControl fullWidth>
-        <InputLabel id="space-selector-label">Select Space</InputLabel>
-        <Select
-          labelId="space-selector-label"
-          id="space-selector"
-          value={state.spaceId || ''}
-          label="Select Space"
-          onChange={handleChange}
-        >
-          <MenuItem value="">
-            <em>Select a space</em>
-          </MenuItem>
+    <div className={cn("space-y-3", className)}>
+      <span className="text-sm font-semibold text-muted-foreground block">Select Space</span>
+      <Select
+        value={state.spaceId || ''}
+        onValueChange={handleValueChange}
+      >
+        <SelectTrigger className="w-full bg-background/50">
+          <SelectValue placeholder="Select a space" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="NO_SELECTION_PLACEHOLDER" disabled className="text-muted-foreground italic">
+            Select a space
+          </SelectItem>
           {spaces.map((space) => (
-            <MenuItem key={space.id} value={space.id}>
-              {space.name} ({space.id})
-            </MenuItem>
+            <SelectItem key={space.id} value={space.id}>
+              {space.name} <span className="text-[10px] opacity-50 ml-1">({space.id})</span>
+            </SelectItem>
           ))}
-        </Select>
-      </FormControl>
-    </Box>
+        </SelectContent>
+      </Select>
+    </div>
   );
 });
 
 SpaceSelector.displayName = 'SpaceSelector';
 
-export default SpaceSelector; 
+export default SpaceSelector;

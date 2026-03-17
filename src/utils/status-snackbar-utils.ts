@@ -1,24 +1,14 @@
 export type Severity = 'success' | 'info' | 'warning' | 'error';
 
-export const getSeverity = (message: string | null | undefined): Severity => {
-    if (!message) {
-        return 'info';
-    }
-    
-    const lowerMessage = message.toLowerCase();
-    
-    if (lowerMessage.includes('error') || lowerMessage.includes('failed')) {
-        return 'error';
-    }
-    
-    if (lowerMessage.includes('success') || lowerMessage.includes('completed')) {
-        return 'success';
-    }
-    
-    if (lowerMessage.includes('warning') || lowerMessage.includes('warn')) {
-        return 'warning';
-    }
-    
+export const getSeverity = (message: unknown): Severity => {
+    if (!message || typeof message !== 'string') return 'success';
+
+    const lower = message.toLowerCase();
+
+    if (lower.includes('error') || lower.includes('failed')) return 'error';
+    if (lower.includes('success') || lower.includes('completed')) return 'success';
+    if (lower.includes('warning') || lower.includes('warn')) return 'warning';
+
     return 'info';
 };
 

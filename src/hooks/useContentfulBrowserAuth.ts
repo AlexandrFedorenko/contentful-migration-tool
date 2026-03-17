@@ -1,164 +1,77 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useUserProfile } from './useUserProfile';
+import { useAuthMutations } from './mutations/useAuthMutations';
 
 interface AuthStatus {
     logged_in: boolean;
     config?: string;
 }
 
-interface StartLoginResponse {
-    success: boolean;
-    browser_url?: string;
-    message?: string;
-}
-
-interface SaveTokenResponse {
-    success: boolean;
-    message?: string;
-}
-
-interface LogoutResponse {
-    success: boolean;
-    message?: string;
-}
-
 export const useContentfulBrowserAuth = () => {
-    const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const { userProfile, fetchUserProfile, isLoading: isProfileLoading } = useUserProfile();
+    const { saveToken: saveTokenMutation, logout: logoutMutation, startLogin: startLoginMutation } = useAuthMutations();
+
     const [authUrl, setAuthUrl] = useState<string>('');
     const [token, setToken] = useState<string>('');
 
-    // Initialize from localStorage
+    // Derived state
+    const isLoggedIn = !!userProfile?.isContentfulTokenSet;
+    const isLoading = isProfileLoading || saveTokenMutation.isPending || logoutMutation.isPending || startLoginMutation.isPending;
+
+    // Sync with localStorage
     useEffect(() => {
-        const storedAuth = localStorage.getItem('contentful_auth_status');
-        if (storedAuth === 'true') {
-            setIsLoggedIn(true);
+        if (isLoggedIn) {
+            localStorage.setItem('contentful_auth_status', 'true');
+        } else if (!isProfileLoading && userProfile !== null) {
+            // Only clear if we loaded profile and verified not logged in
+            localStorage.removeItem('contentful_auth_status');
         }
-    }, []);
+    }, [isLoggedIn, isProfileLoading, userProfile]);
 
     const checkAuthStatus = useCallback(async (): Promise<AuthStatus> => {
-        // Don't set loading to true if we already believe we are logged in (prevents flickering)
-        if (!isLoggedIn) setIsLoading(true);
-
-        try {
-            const response = await fetch('/api/check-auth');
-            if (!response.ok) {
-                throw new Error('Failed to check auth status');
-            }
-            const data: AuthStatus = await response.json();
-            setIsLoggedIn(data.logged_in);
-
-            // Sync with localStorage
-            if (data.logged_in) {
-                localStorage.setItem('contentful_auth_status', 'true');
-            } else {
-                localStorage.removeItem('contentful_auth_status');
-            }
-
-            return data;
-        } catch (error) {
-            setIsLoggedIn(false);
-            localStorage.removeItem('contentful_auth_status');
-            return { logged_in: false };
-        } finally {
-            setIsLoading(false);
-        }
-    }, [isLoggedIn]);
+        const profile = await fetchUserProfile();
+        const logged_in = !!profile?.isContentfulTokenSet;
+        return { logged_in };
+    }, [fetchUserProfile]);
 
     const startLogin = useCallback(async (): Promise<string> => {
-        setIsLoading(true);
         try {
-            const response = await fetch('/api/contentful-auth-browser', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ action: 'start-login' }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to start login process');
-            }
-
-            const data: StartLoginResponse = await response.json();
-
-            if (data.success && data.browser_url) {
-                setAuthUrl(data.browser_url);
-                return data.browser_url;
-            } else {
-                throw new Error(data.message || 'Failed to start login process');
-            }
+            const url = await startLoginMutation.mutateAsync();
+            setAuthUrl(url);
+            return url;
         } catch (error) {
             throw error;
-        } finally {
-            setIsLoading(false);
         }
-    }, []);
+    }, [startLoginMutation]);
 
     const saveToken = useCallback(async (newToken: string): Promise<boolean> => {
-        setIsLoading(true);
         try {
-            const response = await fetch('/api/contentful-auth-browser', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'saveToken', token: newToken }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to save token');
-            }
-
-            const data: SaveTokenResponse = await response.json();
-
-            if (data.success) {
-                setToken('');
-                setIsLoggedIn(true);
-                localStorage.setItem('contentful_auth_status', 'true');
-                setIsLoading(false);
-                return true;
-            } else {
-                throw new Error(data.message || 'Failed to save token');
-            }
+            await saveTokenMutation.mutateAsync(newToken);
+            setToken('');
+            // Force refresh profile to update global state
+            await fetchUserProfile(true);
+            return true;
         } catch (error) {
             throw error;
-        } finally {
-            setIsLoading(false);
         }
-    }, []);
+    }, [saveTokenMutation, fetchUserProfile]);
 
     const logout = useCallback(async (): Promise<void> => {
-        setIsLoading(true);
         try {
-            const response = await fetch('/api/contentful-auth-browser', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'logout' }),
-            });
+            await logoutMutation.mutateAsync();
 
-            if (!response.ok) {
-                throw new Error('Failed to logout');
-            }
-
-            const data: LogoutResponse = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to logout');
-            }
-
-            setIsLoggedIn(false);
             localStorage.removeItem('contentful_auth_status');
-            localStorage.removeItem('selectedSpaceId'); // Clear selected space on logout
+            localStorage.removeItem('selectedSpaceId');
             setToken('');
             setAuthUrl('');
+
+            // Force refresh profile
+            await fetchUserProfile(true);
+
         } catch (error) {
             throw error;
-        } finally {
-            setIsLoading(false);
         }
-    }, []);
-
-    useEffect(() => {
-        checkAuthStatus();
-    }, [checkAuthStatus]);
+    }, [logoutMutation, fetchUserProfile]);
 
     return {
         isLoggedIn,
@@ -170,7 +83,7 @@ export const useContentfulBrowserAuth = () => {
         startLogin,
         saveToken,
         logout,
-        setIsLoading,
+        setIsLoading: (_loading: boolean) => { }, // No-op, managed by mutations now
         setAuthUrl
     };
 };

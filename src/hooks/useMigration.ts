@@ -99,8 +99,8 @@ export function useMigration() {
                                     });
                                     await loadBackups(spaceId);
                                 }
-                            } catch (e) {
-                                console.error('Failed to parse SSE event:', e);
+                            } catch {
+                                // Ignore malformed SSE events
                             }
                         }
                     }

@@ -2,6 +2,8 @@ import { useCallback } from "react";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { useLoading } from "./useLoading";
 import { handleError } from "@/utils/errorHandler";
+import { api } from "@/utils/api";
+import { useBackups } from "./useBackups";
 
 interface RenameBackupRequest {
     spaceId: string;
@@ -9,25 +11,10 @@ interface RenameBackupRequest {
     newFileName: string;
 }
 
-interface BackupsResponse {
-    backups: Array<{
-        name: string;
-        path: string;
-        time: number;
-    }>;
-}
-
-const loadBackups = async (spaceId: string): Promise<BackupsResponse> => {
-    const response = await fetch(`/api/backups?spaceId=${spaceId}`);
-    if (!response.ok) {
-        throw new Error('Failed to load backups');
-    }
-    return response.json();
-};
-
 export function useBackupRename() {
     const { dispatch } = useGlobalContext();
     const { withLoading } = useLoading();
+    const { loadBackups } = useBackups();
 
     const handleRename = useCallback(async (
         spaceId: string,
@@ -41,29 +28,18 @@ export function useBackupRename() {
             });
 
             await withLoading("loadingRename", async () => {
-                const response = await fetch('/api/renameBackup', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        spaceId,
-                        oldFileName,
-                        newFileName
-                    } as RenameBackupRequest)
-                });
+                const result = await api.post<void>('/api/renameBackup', {
+                    spaceId,
+                    oldFileName,
+                    newFileName
+                } as RenameBackupRequest);
 
-                if (!response.ok) {
-                    const data = await response.json();
-                    throw new Error(data.error || 'Failed to rename backup');
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to rename backup');
                 }
             });
 
-            const backupsData = await loadBackups(spaceId);
-            dispatch({
-                type: "SET_DATA",
-                payload: { backups: backupsData.backups }
-            });
+            await loadBackups(spaceId, true);
 
             dispatch({
                 type: "SET_STATUS",
@@ -78,7 +54,7 @@ export function useBackupRename() {
             });
             return false;
         }
-    }, [dispatch, withLoading]);
+    }, [dispatch, withLoading, loadBackups]);
 
     return { handleRename };
 }
