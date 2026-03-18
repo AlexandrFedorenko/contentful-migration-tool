@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // output: 'standalone',
+  output: 'standalone',
 
   // Tell Next.js to treat these as external Node.js modules and NOT bundle them
   serverExternalPackages: ['contentful-cli', 'contentful-management', '@prisma/client', 'prisma'],
