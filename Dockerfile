@@ -11,6 +11,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Copy Prisma schema for migrations
+COPY prisma ./prisma
 # Generate Prisma client before build
 RUN npx prisma generate
 RUN npm run build
@@ -26,6 +28,9 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
+
+# Copy Prisma schema for runtime migrations
+COPY --from=builder /app/prisma ./prisma
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
