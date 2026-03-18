@@ -17,7 +17,7 @@ COPY prisma ./prisma
 RUN npx prisma generate
 RUN npm run build
 
-# 3. Production runner
+# 3. Production runner with standalone
 FROM node:18-alpine AS runner
 WORKDIR /app
 
@@ -29,22 +29,18 @@ RUN apk add --no-cache openssl
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-
-# Copy Prisma schema for runtime migrations
-COPY --from=builder /app/prisma ./prisma
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Performance optimization: use standalone output
+# Copy standalone output
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy Prisma client and schema for runtime
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Copy Prisma files for runtime
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy package.json for reference
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 # Persistent storage for backups
 RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
