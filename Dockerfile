@@ -40,6 +40,10 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy Prisma client and schema for runtime
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+
 # Persistent storage for backups
 RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
 
