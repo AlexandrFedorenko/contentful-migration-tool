@@ -45,6 +45,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 # Copy package.json for reference
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
+# Copy scripts for admin operations
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+
 # Persistent storage for backups
 RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
 
