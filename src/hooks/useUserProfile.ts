@@ -52,11 +52,11 @@ export function useUserProfile() {
         return null;
     }, [userProfile, isLoading, dispatch, errors]);
 
-    useEffect(() => {
-        if (!userProfile && !isLoading && !_isFetchingProfile) {
+     useEffect(() => {
+        if (!userProfile && !isLoading && !_isFetchingProfile && !profileError) {
             fetchUserProfile();
         }
-    }, [fetchUserProfile, userProfile, isLoading]);
+    }, [fetchUserProfile, userProfile, isLoading, profileError]);
 
     return { userProfile, fetchUserProfile, isLoading, profileError };
 }
