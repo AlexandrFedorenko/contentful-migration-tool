@@ -26,6 +26,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apk add --no-cache openssl
 
+# Install contentful-cli globally for backup operations
+RUN npm install -g contentful-cli@3.10.2
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
