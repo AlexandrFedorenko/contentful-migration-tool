@@ -45,12 +45,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 # Persistent storage for backups
 RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
 
-# Create startup script to run migrations then start server
-RUN echo '#!/bin/sh\nnpx prisma migrate deploy\nnode server.js' > /app/start.sh && chmod +x /app/start.sh
-
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["/app/start.sh"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
