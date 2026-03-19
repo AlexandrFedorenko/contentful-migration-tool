@@ -221,6 +221,10 @@ export default function ProfilePage() {
                 toast.success('Token added successfully');
                 setNewTokenAlias('');
                 setContentfulToken('');
+                // Auto-activate the newly created token
+                if (res.data?.id) {
+                    await handleActivateToken(res.data.id);
+                }
                 fetchTokens();
             } else {
                 toast.error('Failed to add token', { description: res.error });
