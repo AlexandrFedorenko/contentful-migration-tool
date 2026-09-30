@@ -1,138 +1,61 @@
-import { getAuth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/db";
-import { decrypt } from "@/lib/encryption";
-import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from 'zod';
+import { createApiHandler, route } from '@/server/api';
+import { getActiveToken } from '@/server/contentful/credentials';
+import { environmentId, spaceId } from '@/server/validation';
+import { BackupService } from '@/utils/backup-service';
 import { ContentfulManagement } from '@/utils/contentful-management';
-import * as fs from 'fs';
-import * as path from 'path';
 import type { Locale } from '@/types/common';
 import type { BackupData } from '@/types/backup';
 
-export const config = {
-    api: {
-        bodyParser: {
-            sizeLimit: '50mb',
-        },
-    },
-};
+export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
-export default async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse
-) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+const Body = z.object({
+    spaceId,
+    targetEnvironment: environmentId,
+    backupId: z.string().uuid().optional(),
+    /** Only the locales array of an uploaded export is needed here. */
+    backupContent: z.object({ locales: z.array(z.object({ code: z.string(), name: z.string().optional(), default: z.boolean().optional() }).passthrough()).optional() }).passthrough().optional(),
+    options: z.object({ locales: z.array(z.string()).optional() }).passthrough().optional(),
+}).passthrough();
 
-
-
-    try {
-        const { userId } = getAuth(req);
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        const { spaceId, targetEnvironment, backupContent, fileName, backupId } = req.body;
-
-        if (!spaceId || !targetEnvironment) {
-            return res.status(400).json({ error: 'Missing required parameters' });
-        }
-
-        let parsedLocales: Locale[] = [];
-
-        // Strategy 1: Content provided directly (e.g. from client upload)
-        if (backupContent) {
-            parsedLocales = (backupContent.locales || []) as Locale[];
-        }
-        // Strategy 2: BackupId provided (database backup)
-        else if (backupId) {
-            const { BackupService } = await import('@/utils/backup-service');
-            const backupData = await BackupService.getBackupContent(backupId, userId) as BackupData;
-            parsedLocales = (backupData.locales || []) as Locale[];
-        }
-        // Strategy 3: Filename provided (server-side file backup)
-        else if (fileName) {
-            const backupsDir = path.join(process.cwd(), 'backups', spaceId);
-            const backupPath = path.join(backupsDir, fileName);
-
-            if (!fs.existsSync(backupPath)) {
-                return res.status(404).json({ error: 'Backup file not found' });
+/**
+ * POST /api/validate-restore — compare backup locales with the target environment
+ * so the UI can ask for a locale mapping before restoring.
+ */
+export default createApiHandler({
+    POST: route({
+        body: Body,
+        rateLimit: { limit: 30, windowSeconds: 60 },
+        handler: async (_req, _res, { user, body }) => {
+            let backupLocales: Locale[] = [];
+            if (body.backupContent) {
+                backupLocales = (body.backupContent.locales ?? []) as Locale[];
+            } else if (body.backupId) {
+                backupLocales = (((await BackupService.getBackupContent(body.backupId, user.id)) as BackupData).locales ?? []) as Locale[];
             }
 
-            const fileStr = fs.readFileSync(backupPath, 'utf-8');
-            const json = JSON.parse(fileStr);
-            parsedLocales = (json.locales || []) as Locale[];
-        } else {
-            return res.status(400).json({ error: 'Either backupContent, backupId, or fileName must be provided' });
-        }
+            const token = await getActiveToken(user.id);
+            const targetLocales: Locale[] = (await ContentfulManagement.getLocales(body.spaceId, body.targetEnvironment, token))
+                .map((l: Locale) => ({ code: l.code, default: l.default, name: l.name }));
 
-        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+            let sourceLocales = backupLocales.map((l) => ({ code: l.code, default: l.default, name: l.name }));
+            if (body.options?.locales?.length) {
+                const selected = new Set(body.options.locales);
+                sourceLocales = sourceLocales.filter((l) => selected.has(l.code));
+            }
 
-        if (!user || !user.contentfulToken) {
-            return res.status(401).json({ error: 'Contentful token not set/found' });
-        }
+            const sourceDefault = sourceLocales.find((l) => l.default);
+            const targetDefault = targetLocales.find((l) => l.default);
+            const defaultMismatch = sourceDefault ? sourceDefault.code !== targetDefault?.code : false;
+            const targetCodes = new Set(targetLocales.map((l) => l.code));
+            const missingInTarget = sourceLocales.filter((l) => !targetCodes.has(l.code)).map((l) => l.code);
 
-        const token = decrypt(user.contentfulToken);
-
-        // 1. Fetch Target Locales
-        const targetLocalesData = await ContentfulManagement.getLocales(spaceId, targetEnvironment, token);
-        const targetLocales: Locale[] = targetLocalesData.map((l: Locale) => ({
-            code: l.code,
-            default: l.default,
-            name: l.name
-        }));
-
-        // 2. Parse Backup Locales
-        let sourceLocalesRaw = parsedLocales.map((l: Locale) => ({
-            code: l.code,
-            default: l.default,
-            name: l.name
-        }));
-
-        const { options } = req.body;
-
-        // Filter by selected locales if provided
-        if (options?.locales && Array.isArray(options.locales) && options.locales.length > 0) {
-            const selectedSet = new Set(options.locales);
-            sourceLocalesRaw = sourceLocalesRaw.filter((l: Locale) => selectedSet.has(l.code));
-        }
-
-        const sourceLocales = sourceLocalesRaw;
-
-        const sourceDefault = sourceLocales.find((l: Locale) => l.default);
-        const targetDefault = targetLocales.find((l: Locale) => l.default);
-
-
-
-        // 3. Analyze Mismatches
-        // Check default mismatch ONLY if the source default locale is actually being restored
-        const defaultMismatch = sourceDefault ? (sourceDefault.code !== targetDefault?.code) : false;
-
-        const targetCodes = new Set(targetLocales.map((l: Locale) => l.code));
-        const missingInTarget = sourceLocales
-            .filter((l: Locale) => !targetCodes.has(l.code))
-            .map((l: Locale) => l.code);
-
-
-
-        const status = (defaultMismatch || missingInTarget.length > 0) ? 'mismatch' : 'ok';
-
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                status,
+            return {
+                status: defaultMismatch || missingInTarget.length > 0 ? 'mismatch' : 'ok',
                 sourceLocales,
                 targetLocales,
-                details: {
-                    defaultMismatch,
-                    missingInTarget
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error('[VALIDATE-RESTORE] Error:', error);
-        return res.status(500).json({ error: 'Failed to validate restore' });
-    }
-}
+                details: { defaultMismatch, missingInTarget },
+            };
+        },
+    }),
+});

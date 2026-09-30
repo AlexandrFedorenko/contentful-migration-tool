@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
-import { prisma } from '@/lib/db';
-import { decrypt } from '@/lib/encryption';
+import { requireUser, publicErrorMessage } from '@/server/api';
+import { findActiveToken } from '@/server/contentful/credentials';
+import { isValidEnvironmentId, isValidSpaceId } from '@/server/validation';
 import { ContentfulManagement } from '@/utils/contentful-management';
 import {
     resolveContentTypeDependencies,
@@ -36,11 +36,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    const { userId } = getAuth(req);
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user?.contentfulToken) {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const token = await findActiveToken(user.id);
+    if (!token) {
         return res.status(400).json({ success: false, error: 'Contentful token not configured' });
     }
 
@@ -63,9 +62,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!spaceId || !environmentId || !selectedContentTypeIds?.length) {
         return res.status(400).json({ success: false, error: 'spaceId, environmentId, selectedContentTypeIds are required' });
     }
+    if (!isValidSpaceId(spaceId) || !isValidEnvironmentId(environmentId)) {
+        return res.status(400).json({ success: false, error: 'Invalid space or environment id' });
+    }
 
     try {
-        const token = decrypt(user.contentfulToken);
 
         // 1. Fetch all content types to resolve dependencies
         const allCTs = await ContentfulManagement.getContentTypes(spaceId, environmentId, token);
@@ -212,7 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.error('[SMART EXPORT ERROR]', error);
         return res.status(500).json({
             success: false,
-            error: error instanceof Error ? error.message : 'Export failed',
+            error: publicErrorMessage(error, 'Export failed'),
         });
     }
 }

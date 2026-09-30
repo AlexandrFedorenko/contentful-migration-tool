@@ -1,46 +1,51 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { z } from 'zod';
+import { createApiHandler, route } from '@/server/api';
+import { notFound } from '@/server/http-error';
+import * as storage from '@/server/storage';
 import { BackupService } from '@/utils/backup-service';
-import { getAuth } from '@clerk/nextjs/server';
 
-export default async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse
-) {
-    if (req.method !== 'GET') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
+export const config = { api: { responseLimit: false } };
 
-    const { userId } = getAuth(req);
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    const { backupId, fileName } = req.query;
-
-    if (!backupId || typeof backupId !== 'string') {
-        return res.status(400).json({
-            success: false,
-            error: 'Backup ID is required'
-        });
-    }
-
-    try {
-        const content = await BackupService.getBackupContent(backupId, userId);
-
-        // Set headers for file download
-        const downloadName = typeof fileName === 'string' ? fileName : `backup-${backupId}.json`;
-        const fileContent = JSON.stringify(content, null, 2);
-
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        res.setHeader('Content-Length', Buffer.byteLength(fileContent));
-
-        // Send the file
-        res.status(200).send(fileContent);
-    } catch (error) {
-        return res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to download backup'
-        });
-    }
+function attachmentName(name: string, ext: string): string {
+    const base = name.replace(/\.json$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120) || 'backup';
+    return `${base}${ext}`;
 }
+
+/**
+ * GET /api/download-backup?backupId=&format=json|zip
+ * Streams a backup owned by the current user (JSON export or asset archive).
+ */
+export default createApiHandler({
+    GET: route({
+        query: z.object({ backupId: z.string().uuid(), format: z.enum(['json', 'zip']).default('json') }),
+        rateLimit: { limit: 60, windowSeconds: 60 },
+        handler: async (_req, res, { user, query }) => {
+            const backup = await BackupService.getBackupRecord(query.backupId, user.id);
+            res.setHeader('Cache-Control', 'private, no-store');
+
+            if (query.format === 'zip') {
+                const key = storage.keys.archive(user.id, backup.id);
+                const size = await storage.fileSize(key);
+                if (!backup.hasZip || size === null) throw notFound('Asset archive');
+                res.setHeader('Content-Type', 'application/zip');
+                res.setHeader('Content-Length', String(size));
+                res.setHeader('Content-Disposition', `attachment; filename="${attachmentName(backup.name, '-with-assets.zip')}"`);
+                await new Promise<void>((resolve, reject) => {
+                    storage.createReadStream(key).on('error', reject).pipe(res).on('finish', resolve);
+                });
+                return;
+            }
+
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${attachmentName(backup.name, '.json')}"`);
+            if (backup.storageKey) {
+                await new Promise<void>((resolve, reject) => {
+                    storage.createJsonGzReadStream(storage.keys.backup(user.id, backup.id)).on('error', reject).pipe(res).on('finish', resolve);
+                });
+                return;
+            }
+            if (!backup.content) throw notFound('Backup content');
+            res.status(200).send(JSON.stringify(backup.content));
+        },
+    }),
+});

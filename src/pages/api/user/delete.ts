@@ -1,39 +1,25 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth, clerkClient } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { appendSetCookie, serializeCookie, SESSION_COOKIE } from '@/server/auth/session';
+import { BackupService } from '@/utils/backup-service';
+import { logger } from '@/utils/logger';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method !== 'DELETE') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
-
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        // 1. Delete all data from the local database.
-        // Prisma schema defines onDelete: Cascade for all user relations.
-        await prisma.user.delete({
-            where: { clerkId: userId }
-        });
-
-        // 2. Delete the user from Clerk (Identity Provider)
-        const client = await clerkClient();
-        await client.users.deleteUser(userId);
-
-        return res.status(200).json({ success: true, message: 'Account and all data deleted successfully' });
-    } catch (error) {
-        // If the user was already deleted from local db but clerk fails, or if clerk is already gone
-        console.error('Account deletion error:', error);
-        
-        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
-             // Prisma record not found - maybe already deleted
-             return res.status(404).json({ success: false, error: 'User not found in local database' });
-        }
-        
-        return res.status(500).json({ success: false, error: 'Failed to delete account' });
-    }
-}
+/**
+ * DELETE /api/user/delete — delete the account: sessions, tokens, backups (DB rows and
+ * files), templates and jobs are removed; activity logs are anonymised.
+ */
+export default createApiHandler({
+    DELETE: route({
+        rateLimit: { limit: 3, windowSeconds: 3600 },
+        handler: async (_req, res, { user }) => {
+            await BackupService.purgeUserFiles(user.id);
+            await prisma.$transaction([
+                prisma.systemLog.updateMany({ where: { userId: user.id }, data: { userEmail: null } }),
+                prisma.user.delete({ where: { id: user.id } }),
+            ]);
+            await logger.info('ACCOUNT_DELETE', 'Account deleted by its owner', { userId: user.id });
+            appendSetCookie(res, serializeCookie(SESSION_COOKIE, '', { maxAgeSeconds: 0 }));
+            return { message: 'Account and all data deleted successfully' };
+        },
+    }),
+});

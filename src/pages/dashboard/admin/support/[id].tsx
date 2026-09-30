@@ -14,7 +14,7 @@ import {
     Calendar,
     ArrowUpRight
 } from 'lucide-react';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from "@/context/SessionContext";
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,7 @@ interface SupportRequest {
     status: string;
     createdAt: string;
     user: {
-        clerkId: string;
+        id: string;
         displayName?: string;
         email?: string;
     };

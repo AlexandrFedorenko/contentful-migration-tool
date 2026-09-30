@@ -116,7 +116,7 @@ export function useBackup() {
             let backupData = data; // Declared backupData here
 
             if (data && data.hasZip && data.backupFile) {
-                const downloadUrl = `/api/download-transient-zip?spaceId=${spaceId}&fileName=${encodeURIComponent(data.backupFile)}`;
+                const downloadUrl = `/api/download-backup?backupId=${encodeURIComponent(data.backupId)}&format=zip`;
 
                 dispatch({
                     type: "SET_STATUS",

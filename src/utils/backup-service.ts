@@ -1,344 +1,150 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import * as fs from 'fs';
-import * as path from 'path';
-import { Backup } from '@/types/backup';
-import AdmZip from 'adm-zip';
-import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { Backup } from '@/types/backup';
+import { HttpError, notFound } from '@/server/http-error';
+import * as storage from '@/server/storage';
 
+/** JSON-only backups kept per user before the oldest one is rotated out. */
+const MAX_JSON_BACKUPS = 100;
+
+/**
+ * Backup metadata lives in Postgres; the export itself is a gzipped file in storage
+ * (DATA_DIR/backups/<userId>/<backupId>.json.gz). Older rows may still carry the export
+ * inline in `content` and are read transparently.
+ *
+ * All methods take the internal User.id and always scope queries by it.
+ */
 export class BackupService {
-  /**
-   * Get max backups per user from AppSettings (default: 1)
-   */
-  private static async getMaxBackupsPerUser(): Promise<number> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const settings = await prisma.appSettings.findFirst() as any;
+  private static async maxAssetBackups(): Promise<number> {
+    const settings = await prisma.appSettings.findFirst({ select: { maxBackupsPerUser: true } });
     return settings?.maxBackupsPerUser ?? 1;
   }
 
-  /**
-   * Helper to resolve Clerk ID to local User ID
-   */
-  private static async resolveUserId(clerkId: string): Promise<string> {
-    const user = await prisma.user.findUnique({ where: { clerkId } });
-    if (!user) throw new Error(`User not found for Clerk ID: ${clerkId}`);
-    return user.id;
+  static async getBackups(spaceId: string, userId: string): Promise<Backup[]> {
+    const backups = await prisma.backupRecord.findMany({
+      where: { spaceId, userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, createdAt: true, hasZip: true, sizeBytes: true, environmentId: true },
+    });
+    return backups.map((b) => ({
+      id: b.id,
+      name: b.name,
+      path: '',
+      time: b.createdAt.getTime(),
+      hasZip: b.hasZip,
+      sizeBytes: b.sizeBytes !== null ? Number(b.sizeBytes) : undefined,
+      environmentId: b.environmentId ?? undefined,
+    }));
   }
 
   /**
-   * Helper to get local backup directory path
+   * Enforce storage quotas before a new backup is created.
+   * Asset backups are limited by AppSettings.maxBackupsPerUser; with `overwrite` the oldest
+   * archive is dropped (its JSON export is kept). JSON backups rotate silently.
    */
-  private static getBackupDir(spaceId: string): string {
-    return path.join(process.cwd(), 'backups', spaceId);
+  static async checkBackupLimit(_spaceId: string, userId: string, overwrite = false, isAssetBackup = false): Promise<void> {
+    if (isAssetBackup) {
+      const max = await this.maxAssetBackups();
+      const count = await prisma.backupRecord.count({ where: { userId, hasZip: true } });
+      if (count >= max) {
+        if (!overwrite) throw new Error(`BACKUP_LIMIT_REACHED:${count}:${max}`);
+        const oldest = await prisma.backupRecord.findFirst({ where: { userId, hasZip: true }, orderBy: { createdAt: 'asc' } });
+        if (oldest) {
+          await storage.remove(storage.keys.archive(userId, oldest.id));
+          await prisma.backupRecord.update({ where: { id: oldest.id }, data: { hasZip: false } });
+        }
+      }
+      return;
+    }
+    const total = await prisma.backupRecord.count({ where: { userId } });
+    if (total >= MAX_JSON_BACKUPS) {
+      const oldest = await prisma.backupRecord.findFirst({ where: { userId }, orderBy: { createdAt: 'asc' } });
+      if (oldest) await this.deleteBackup(oldest.id, userId);
+    }
   }
 
-  /**
-   * Helper to transform JSON filename to asset ZIP filename
-   */
-  private static getZipName(jsonName: string): string {
-    return jsonName.replace('.json', '-with-assets.zip');
-  }
-
-  /**
-   * Retrieves all backups for a specific space and user.
-   * Checks the physical disk presence for each backup and returns a validated list.
-   *
-   * @param spaceId - Contentful Space ID
-   * @param clerkId - Clerk User ID
-   * @returns Array of validated Backup objects
-   */
-  static async getBackups(spaceId: string, clerkId: string): Promise<Backup[]> {
+  /** Persist a new backup: export content to storage, metadata to the database. */
+  static async saveBackup(input: {
+    userId: string;
+    spaceId: string;
+    environmentId: string;
+    name: string;
+    content: unknown;
+    stats?: Record<string, number>;
+  }): Promise<{ id: string; name: string }> {
+    const record = await prisma.backupRecord.create({
+      data: {
+        userId: input.userId,
+        spaceId: input.spaceId,
+        environmentId: input.environmentId,
+        name: input.name,
+        type: 'LOCAL_DB',
+        description: `Backup of ${input.spaceId}/${input.environmentId}`,
+        stats: input.stats as Prisma.InputJsonValue | undefined,
+      },
+    });
     try {
-      const userId = await this.resolveUserId(clerkId);
-      const backups = await prisma.backupRecord.findMany({
-        where: { spaceId, userId, type: 'LOCAL_DB' },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      const backupDir = this.getBackupDir(spaceId);
-
-      return backups.map(backup => {
-        const zipPath = path.join(backupDir, this.getZipName(backup.name));
-        const physicalHasZip = fs.existsSync(zipPath);
-
-        return {
-          name: backup.name,
-          path: '',
-          time: backup.createdAt.getTime(),
-          id: backup.id,
-          hasZip: !!(backup as any).hasZip && physicalHasZip
-        };
+      const size = await storage.writeJsonGz(storage.keys.backup(input.userId, record.id), input.content);
+      await prisma.backupRecord.update({
+        where: { id: record.id },
+        data: { storageKey: storage.keys.backup(input.userId, record.id).join('/'), sizeBytes: BigInt(size) },
       });
     } catch (error) {
-      console.error('Failed to get backups:', error);
-      return [];
+      await prisma.backupRecord.delete({ where: { id: record.id } }).catch(() => undefined);
+      throw error;
     }
+    return { id: record.id, name: record.name };
   }
 
-  /**
-   * Enforces the user's backup storage limits by optionally deleting older backups.
-   * If limits are exceeded and overwrite is not allowed, throws a specific error.
-   * Limits are configurable per user/tier in AppSettings (default max: 10).
-   *
-   * @param spaceId - Contentful Space ID
-   * @param clerkId - Clerk User ID
-   * @param overwrite - If true, automatically deletes the oldest backup to make room
-   * @param isAssetBackup - If true, verifies limits against zip storage limits
-   * @throws Error if limits are reached and `overwrite` is false
-   */
-  static async checkBackupLimit(spaceId: string, clerkId: string, overwrite = false, isAssetBackup = false): Promise<void> {
-    const userId = await this.resolveUserId(clerkId);
-    const maxBackups = await this.getMaxBackupsPerUser();
-
-    // Limits: 
-    // - Asset Backups (with ZIP): Strict limit from settings (default 1)
-    // - JSON Backups (no ZIP): Higher limit (hardcoded or derived) to allow history
-
-    const MAX_JSON_BACKUPS = 100;
-
-    if (isAssetBackup) {
-      // Check limit for HEAVY backups
-      // IMPORTANT: We must verify physical existence because cleanup jobs might delete ZIPs
-      // without updating the DB immediately. We need to sync the state here.
-
-      const potentialZipBackups = await prisma.backupRecord.findMany({
-        where: { userId, hasZip: true }
-      });
-
-      let realZipCount = 0;
-
-      for (const backup of potentialZipBackups) {
-        const zipName = this.getZipName(backup.name);
-        const zipPath = path.join(this.getBackupDir(backup.spaceId), zipName);
-
-        if (fs.existsSync(zipPath)) {
-          realZipCount++;
-        } else {
-          // File is missing, update DB to reflect reality
-          console.warn(`[CheckLimit] ZIP file missing for ${backup.id}, updating DB.`);
-          await prisma.backupRecord.update({
-            where: { id: backup.id },
-            data: { hasZip: false }
-          });
-        }
-      }
-
-      if (realZipCount >= maxBackups) {
-        if (overwrite) {
-          // Delete ONLY the oldest ASSET backup to make room
-          await this.downgradeOldestAssetBackup(userId);
-        } else {
-          throw new Error(`BACKUP_LIMIT_REACHED:${realZipCount}:${maxBackups}`);
-        }
-      }
-    } else {
-      // Check limit for LIGHT backups (JSON only)
-      // We count ALL backups towards this purely to prevent infinite spam, but the limit is higher
-      const totalCount = await prisma.backupRecord.count({ where: { userId } });
-
-      if (totalCount >= MAX_JSON_BACKUPS) {
-        // Auto-rotate: Delete the oldest backup to make room silently.
-        // We do NOT want to show the overwrite dialog for JSON backups (user request).
-        await this.deleteOldestBackup(userId, false);
-      }
-    }
+  static async getBackupRecord(backupId: string, userId: string) {
+    const backup = await prisma.backupRecord.findFirst({ where: { id: backupId, userId } });
+    if (!backup) throw notFound('Backup');
+    return backup;
   }
 
-  /**
-   * Downgrade the oldest ASSET backup to a regular JSON backup
-   * (Removes zip file, updates DB, keeps JSON content)
-   */
-  static async downgradeOldestAssetBackup(userId: string): Promise<void> {
-    const oldest = await prisma.backupRecord.findFirst({
-      where: { userId, type: 'LOCAL_DB', hasZip: true },
-      orderBy: { createdAt: 'asc' }
-    });
-
-    if (oldest) {
-      // Cleanup physical ZIP
-      const zipPath = path.join(this.getBackupDir(oldest.spaceId), this.getZipName(oldest.name));
-      if (fs.existsSync(zipPath)) {
-        try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
-      }
-
-      // Update record to remove 'hasZip' flag
-      await prisma.backupRecord.update({
-        where: { id: oldest.id },
-        data: { hasZip: false }
-      });
-    }
+  static async getBackupContent(backupId: string, userId: string): Promise<unknown> {
+    const backup = await this.getBackupRecord(backupId, userId);
+    if (backup.storageKey) return storage.readJsonGz(storage.keys.backup(userId, backup.id));
+    if (backup.content) return backup.content;
+    throw new HttpError(404, 'BACKUP_EMPTY', 'Backup content is missing');
   }
 
-  /**
-   * Delete the oldest backup to make room
-   */
-  static async deleteOldestBackup(userId: string, onlyWithZip: boolean): Promise<void> {
-    const oldest = await prisma.backupRecord.findFirst({
-      where: {
-        userId,
-        type: 'LOCAL_DB',
-        ...(onlyWithZip ? { hasZip: true } : {})
-      },
-      orderBy: { createdAt: 'asc' }
-    });
-
-    if (oldest) {
-      // Cleanup physical ZIP if it exists
-      const zipPath = path.join(this.getBackupDir(oldest.spaceId), this.getZipName(oldest.name));
-      if (fs.existsSync(zipPath)) {
-        try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
-      }
-      await prisma.backupRecord.delete({ where: { id: oldest.id } });
-    }
+  /** Same as getBackupContent but looks the backup up by space and file name (legacy preview URLs). */
+  static async getBackupContentByName(spaceId: string, name: string, userId: string): Promise<unknown> {
+    const backup = await prisma.backupRecord.findFirst({ where: { spaceId, name, userId }, select: { id: true } });
+    if (!backup) throw notFound('Backup');
+    return this.getBackupContent(backup.id, userId);
   }
 
-  /**
-   * @deprecated Use deleteOldestBackup instead
-   */
-  static async deleteAllUserBackups(clerkId: string): Promise<number> {
-    // Keeping for backward compatibility if needed, but logic is replaced by deleteOldestBackup
-    const userId = await this.resolveUserId(clerkId);
-    return (await prisma.backupRecord.deleteMany({ where: { userId, type: 'LOCAL_DB' } })).count;
-  }
-
-  /**
-   * Saves metadata and content of a newly created backup into the database.
-   * Overwrites if a backup with the same filename already exists.
-   *
-   * @param clerkId - Clerk User ID
-   * @param spaceId - Contentful Space ID
-   * @param fileName - Name of the JSON backup file
-   * @param content - The parsed backup JSON content
-   * @param hasZip - Boolean flag indicating if an associated asset ZIP archive exists
-   * @returns The created Prisma BackupRecord object
-   */
-  static async saveBackupToDb(
-    clerkId: string,
-    spaceId: string,
-    fileName: string,
-    content: unknown,
-    hasZip: boolean = false
-  ): Promise<Backup & { id: string }> {
-    const userId = await this.resolveUserId(clerkId);
-    const backup = await prisma.backupRecord.create({
-      data: {
-        name: fileName,
-        spaceId,
-        userId,
-        type: 'LOCAL_DB',
-        content: content as Prisma.InputJsonValue,
-        hasZip,
-        description: `Backup for space ${spaceId}`
-      }
-    });
-
-    return {
-      name: backup.name,
-      path: '',
-      time: backup.createdAt.getTime(),
-      id: backup.id,
-      hasZip: !!backup.hasZip
-    };
-  }
-
-  static async getBackupContent(backupId: string, clerkId: string): Promise<unknown> {
-    const userId = await this.resolveUserId(clerkId);
-    const backup = await prisma.backupRecord.findFirst({
-      where: { id: backupId, userId }
-    });
-
-    if (!backup || !backup.content) throw new Error('Backup not found or empty');
-    return backup.content;
-  }
-
-  static async deleteBackup(backupId: string, clerkId: string): Promise<boolean> {
-    const userId = await this.resolveUserId(clerkId);
-    const backup = await prisma.backupRecord.findFirst({
-      where: { id: backupId, userId }
-    });
-
+  static async deleteBackup(backupId: string, userId: string): Promise<boolean> {
+    const backup = await prisma.backupRecord.findFirst({ where: { id: backupId, userId }, select: { id: true } });
     if (!backup) return false;
-
-    // Cleanup physical ZIP if it exists
-    const zipPath = path.join(this.getBackupDir(backup.spaceId), this.getZipName(backup.name));
-    if (fs.existsSync(zipPath)) {
-      try {
-        fs.unlinkSync(zipPath);
-      } catch (err) {
-        console.error("Archive cleanup failed:", err);
-      }
-    }
-
-    await prisma.backupRecord.delete({ where: { id: backupId } });
+    await prisma.backupRecord.delete({ where: { id: backup.id } });
+    await Promise.all([
+      storage.remove(storage.keys.backup(userId, backup.id)),
+      storage.remove(storage.keys.archive(userId, backup.id)),
+    ]);
     return true;
   }
 
-  static async getTotalBackupsCount(clerkId: string): Promise<number> {
-    try {
-      const userId = await this.resolveUserId(clerkId);
-      return await prisma.backupRecord.count({ where: { userId } });
-    } catch {
-      return 0;
-    }
+  /** Remove every file that belongs to a user (account deletion). */
+  static async purgeUserFiles(userId: string): Promise<void> {
+    await Promise.all([
+      storage.remove(['backups', userId]),
+      storage.remove(['archives', userId]),
+      storage.remove(storage.keys.uploadDir(userId)),
+    ]);
   }
 
-  static async createBackupZip(spaceId: string, clerkId: string): Promise<Buffer> {
-    const userId = await this.resolveUserId(clerkId);
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: any = { userId, type: 'LOCAL_DB' };
-    if (spaceId !== 'all') {
-      whereClause.spaceId = spaceId;
-    }
-
-    const backups = await prisma.backupRecord.findMany({
-      where: whereClause
-    });
-
-    if (backups.length === 0) throw new Error('No backups found');
-
-    const zip = new AdmZip();
-    backups.forEach(backup => {
-      if (backup.content) {
-        zip.addFile(backup.name, Buffer.from(JSON.stringify(backup.content, null, 2), "utf8"));
-      }
-    });
-
-    return zip.toBuffer();
+  static async getTotalBackupsCount(userId: string): Promise<number> {
+    return prisma.backupRecord.count({ where: { userId } });
   }
 
-  static async renameBackup(spaceId: string, clerkId: string, oldFileName: string, newFileName: string): Promise<void> {
-    const userId = await this.resolveUserId(clerkId);
-
-    const existing = await prisma.backupRecord.findFirst({
-      where: { spaceId, userId, name: newFileName, type: 'LOCAL_DB' }
-    });
-    if (existing) throw new Error('A backup with this name already exists');
-
-    const backup = await prisma.backupRecord.findFirst({
-      where: { spaceId, userId, name: oldFileName, type: 'LOCAL_DB' }
-    });
-    if (!backup) throw new Error('Backup not found');
-
-    // Rename physical ZIP file if it exists
-    const oldZipName = this.getZipName(oldFileName);
-    const newZipName = this.getZipName(newFileName);
-    const backupDir = this.getBackupDir(spaceId);
-
-    const oldZipPath = path.join(backupDir, oldZipName);
-    const newZipPath = path.join(backupDir, newZipName);
-
-    if (fs.existsSync(oldZipPath)) {
-      try {
-        fs.renameSync(oldZipPath, newZipPath);
-      } catch {
-        // Proceed with DB update even if file rename fails
-      }
-    }
-
-    await prisma.backupRecord.update({
-      where: { id: backup.id },
-      data: { name: newFileName }
-    });
+  static async renameBackup(spaceId: string, userId: string, oldFileName: string, newFileName: string): Promise<void> {
+    const clash = await prisma.backupRecord.findFirst({ where: { spaceId, userId, name: newFileName }, select: { id: true } });
+    if (clash) throw new HttpError(409, 'NAME_TAKEN', 'A backup with this name already exists');
+    const backup = await prisma.backupRecord.findFirst({ where: { spaceId, userId, name: oldFileName }, select: { id: true } });
+    if (!backup) throw notFound('Backup');
+    await prisma.backupRecord.update({ where: { id: backup.id }, data: { name: newFileName } });
   }
 }

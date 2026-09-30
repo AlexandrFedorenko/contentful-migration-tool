@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useCallback } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from "@/context/SessionContext";
 import { useRouter } from 'next/router';
 import {
     RefreshCcw,

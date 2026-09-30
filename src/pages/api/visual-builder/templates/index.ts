@@ -1,53 +1,40 @@
-import { getAuth } from "@clerk/nextjs/server";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/db";
+import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { HttpError } from '@/server/http-error';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { userId } = getAuth(req);
-    if (!userId) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
+const MAX_TEMPLATES = 100;
 
-    try {
-        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-        if (!user) return res.status(404).json({ success: false, error: "User not found" });
-
-        if (req.method === "GET") {
-            const templates = await prisma.visualBuilderTemplate.findMany({
-                where: { userId: user.id },
-                orderBy: { updatedAt: 'desc' }
-            });
-            return res.status(200).json({
-                success: true,
-                data: templates
-            });
-        }
-
-        if (req.method === "POST") {
-            const { name, description, content, category } = req.body;
-
-            if (!name || !content) {
-                return res.status(400).json({ success: false, error: "Name and content are required" });
+/** The current user's saved Visual Builder templates. */
+export default createApiHandler({
+    GET: route({
+        handler: async (_req, _res, { user }) =>
+            prisma.visualBuilderTemplate.findMany({ where: { userId: user.id }, orderBy: { updatedAt: 'desc' }, take: MAX_TEMPLATES }),
+    }),
+    POST: route({
+        body: z.object({
+            name: z.string().trim().min(1).max(120),
+            description: z.string().max(1000).optional(),
+            content: z.array(z.record(z.string(), z.unknown())).max(200),
+            category: z.string().max(40).optional(),
+        }),
+        rateLimit: { limit: 30, windowSeconds: 60 },
+        handler: async (_req, res, { user, body }) => {
+            if ((await prisma.visualBuilderTemplate.count({ where: { userId: user.id } })) >= MAX_TEMPLATES) {
+                throw new HttpError(400, 'TEMPLATE_LIMIT', `You can store up to ${MAX_TEMPLATES} templates`);
             }
-
-            const template = await prisma.visualBuilderTemplate.create({
+            if (JSON.stringify(body.content).length > 500_000) throw new HttpError(413, 'TEMPLATE_TOO_LARGE', 'Template is too large');
+            res.status(201);
+            return prisma.visualBuilderTemplate.create({
                 data: {
-                    name,
-                    description,
-                    content,
-                    category: category || 'custom',
-                    userId: user.id
-                }
+                    userId: user.id,
+                    name: body.name,
+                    description: body.description,
+                    content: body.content as Prisma.InputJsonValue,
+                    category: body.category || 'custom',
+                },
             });
-            return res.status(201).json({
-                success: true,
-                data: template
-            });
-        }
-
-        return res.status(405).json({ success: false, error: "Method not allowed" });
-    } catch (error) {
-        console.error("Template API Error", error);
-        return res.status(500).json({ success: false, error: "Failed to process request" });
-    }
-}
+        },
+    }),
+});

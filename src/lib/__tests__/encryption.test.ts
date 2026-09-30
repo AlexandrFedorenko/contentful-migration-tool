@@ -1,108 +1,90 @@
-import { encrypt, decrypt } from '@/lib/encryption';
+/**
+ * @jest-environment node
+ */
+import crypto from 'crypto';
+import { encrypt, decrypt, needsReencryption, safeEqual } from '@/lib/encryption';
+import { resetEnvCache } from '@/server/env';
 
-describe('Encryption', () => {
-    describe('encrypt', () => {
-        it('should encrypt a string', () => {
-            const text = 'Hello World';
-            const encrypted = encrypt(text);
+const KEY_A = crypto.randomBytes(32).toString('base64');
+const KEY_B = crypto.randomBytes(32).toString('base64');
 
-            expect(encrypted).toBeTruthy();
-            expect(encrypted).not.toBe(text);
-            expect(encrypted).toContain(':'); // IV:encrypted format
-        });
+function setKeys(current: string, previous?: string, legacy?: string) {
+    process.env.ENCRYPTION_KEY = current;
+    if (previous) process.env.ENCRYPTION_KEY_PREVIOUS = previous; else delete process.env.ENCRYPTION_KEY_PREVIOUS;
+    if (legacy) process.env.LEGACY_ENCRYPTION_SECRET = legacy; else delete process.env.LEGACY_ENCRYPTION_SECRET;
+    resetEnvCache();
+}
 
-        it('should return empty string for empty input', () => {
-            expect(encrypt('')).toBe('');
-        });
+describe('encryption', () => {
+    beforeEach(() => setKeys(KEY_A));
 
-        it('should encrypt special characters', () => {
-            const text = '!@#$%^&*()_+-={}[]|\\:";\'<>?,./';
-            const encrypted = encrypt(text);
-
-            expect(encrypted).toBeTruthy();
-            expect(encrypted).not.toBe(text);
-        });
-
-        it('should encrypt unicode characters', () => {
-            const text = '你好世界 🌍 Привет мир';
-            const encrypted = encrypt(text);
-
-            expect(encrypted).toBeTruthy();
-            expect(encrypted).not.toBe(text);
-        });
-
-        it('should produce different outputs for same input (random IV)', () => {
-            const text = 'Same text';
-            const encrypted1 = encrypt(text);
-            const encrypted2 = encrypt(text);
-
-            expect(encrypted1).not.toBe(encrypted2);
-        });
+    it('round-trips unicode and special characters', () => {
+        for (const text of ['Hello', '你好世界 🌍 Привет', '!@#$%^&*():.;\'"', 'x'.repeat(10_000)]) {
+            expect(decrypt(encrypt(text))).toBe(text);
+        }
     });
 
-    describe('decrypt', () => {
-        it('should decrypt an encrypted string', () => {
-            const original = 'Hello World';
-            const encrypted = encrypt(original);
-            const decrypted = decrypt(encrypted);
-
-            expect(decrypted).toBe(original);
-        });
-
-        it('should return empty string for empty input', () => {
-            expect(decrypt('')).toBe('');
-        });
-
-        it('should decrypt special characters', () => {
-            const original = '!@#$%^&*()_+-={}[]|\\:";\'<>?,./';
-            const encrypted = encrypt(original);
-            const decrypted = decrypt(encrypted);
-
-            expect(decrypted).toBe(original);
-        });
-
-        it('should decrypt unicode characters', () => {
-            const original = '你好世界 🌍 Привет мир';
-            const encrypted = encrypt(original);
-            const decrypted = decrypt(encrypted);
-
-            expect(decrypted).toBe(original);
-        });
-
-        it('should throw error for invalid format', () => {
-            // crypto will throw error for invalid IV format
-            expect(() => decrypt('invalid')).toThrow();
-        });
-
-        it('should handle long strings', () => {
-            const original = 'A'.repeat(10000);
-            const encrypted = encrypt(original);
-            const decrypted = decrypt(encrypted);
-
-            expect(decrypted).toBe(original);
-        });
+    it('uses the v2 format with a random IV', () => {
+        const a = encrypt('same');
+        const b = encrypt('same');
+        expect(a).toMatch(/^v2\.[0-9a-f]{8}\./);
+        expect(a).not.toBe(b);
     });
 
-    describe('encrypt/decrypt round-trip', () => {
-        it('should handle multiple encryptions and decryptions', () => {
-            const original = 'Test message';
+    it('returns empty string for empty input', () => {
+        expect(encrypt('')).toBe('');
+        expect(decrypt('')).toBe('');
+    });
 
-            const encrypted1 = encrypt(original);
-            const decrypted1 = decrypt(encrypted1);
-            expect(decrypted1).toBe(original);
+    it('rejects tampered ciphertext', () => {
+        const parts = encrypt('secret-token').split('.');
+        const ct = Buffer.from(parts[4], 'base64url');
+        ct[0] ^= 1;
+        parts[4] = ct.toString('base64url');
+        expect(() => decrypt(parts.join('.'))).toThrow();
+    });
 
-            const encrypted2 = encrypt(decrypted1);
-            const decrypted2 = decrypt(encrypted2);
-            expect(decrypted2).toBe(original);
-        });
+    it('binds ciphertext to AAD', () => {
+        const enc = encrypt('secret', 'token:user-1');
+        expect(decrypt(enc, 'token:user-1')).toBe('secret');
+        expect(() => decrypt(enc, 'token:user-2')).toThrow();
+    });
 
-        it('should handle JSON strings', () => {
-            const original = JSON.stringify({ key: 'value', nested: { data: 123 } });
-            const encrypted = encrypt(original);
-            const decrypted = decrypt(encrypted);
+    it('decrypts with the previous key during rotation and flags re-encryption', () => {
+        const old = encrypt('rotating');
+        setKeys(KEY_B, KEY_A);
+        expect(decrypt(old)).toBe('rotating');
+        expect(needsReencryption(old)).toBe(true);
+        expect(needsReencryption(encrypt('fresh'))).toBe(false);
+    });
 
-            expect(decrypted).toBe(original);
-            expect(JSON.parse(decrypted)).toEqual(JSON.parse(original));
-        });
+    it('fails when the key is unknown', () => {
+        const old = encrypt('lost');
+        setKeys(KEY_B);
+        expect(() => decrypt(old)).toThrow(/not configured/);
+    });
+
+    it('reads legacy AES-CBC values', () => {
+        const legacySecret = 'sk_test_legacy';
+        const key = crypto.createHash('sha256').update(legacySecret).digest();
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+        const legacy = iv.toString('hex') + ':' + Buffer.concat([cipher.update('old-token'), cipher.final()]).toString('hex');
+
+        setKeys(KEY_A, undefined, legacySecret);
+        expect(decrypt(legacy)).toBe('old-token');
+        expect(needsReencryption(legacy)).toBe(true);
+    });
+
+    it('rejects an invalid key length', () => {
+        process.env.ENCRYPTION_KEY = Buffer.from('short').toString('base64');
+        resetEnvCache();
+        expect(() => encrypt('x')).toThrow(/ENCRYPTION_KEY/);
+    });
+
+    it('compares strings in constant time', () => {
+        expect(safeEqual('abc', 'abc')).toBe(true);
+        expect(safeEqual('abc', 'abd')).toBe(false);
+        expect(safeEqual('abc', 'abcd')).toBe(false);
     });
 });

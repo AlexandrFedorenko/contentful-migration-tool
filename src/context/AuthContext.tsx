@@ -1,49 +1,25 @@
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
-import { useContentfulBrowserAuth } from '@/hooks/useContentfulBrowserAuth';
-
-interface AuthStatus {
-  logged_in: boolean;
-  config?: string;
-}
+import React, { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useSession } from '@/context/SessionContext';
 
 interface AuthContextType {
+  /** True when the signed-in user has an active Contentful connection. */
   isLoggedIn: boolean;
   isLoading: boolean;
-  authUrl: string;
-  token: string;
-  setToken: (token: string) => void;
-  checkAuthStatus: () => Promise<AuthStatus>;
-  startLogin: () => Promise<string>;
-  saveToken: (token: string) => Promise<boolean>;
-  logout: () => Promise<void>;
-  setIsLoading: (loading: boolean) => void;
-  setAuthUrl: (url: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider = React.memo<AuthProviderProps>(({ children }) => {
-  const auth = useContentfulBrowserAuth();
-  
-  const contextValue = useMemo(() => auth, [auth]);
-  
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const { user, isLoaded } = useSession();
+  const value = useMemo(
+    () => ({ isLoggedIn: Boolean(user?.hasContentfulToken), isLoading: !isLoaded }),
+    [user?.hasContentfulToken, isLoaded]
   );
-});
-
-AuthProvider.displayName = 'AuthProvider';
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
 
 export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
-}; 
+};

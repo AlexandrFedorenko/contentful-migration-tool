@@ -1,4 +1,3 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AppProps } from "next/app";
 import Head from "next/head";
@@ -10,9 +9,8 @@ import { NetworkStatus } from "@/components/NetworkStatus/NetworkStatus";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ErrorProvider } from "@/context/ErrorContext";
-import { dark } from "@clerk/themes";
 import { useStore } from "@/store/useStore";
-import { useUser } from "@clerk/nextjs";
+import { SessionProvider, useUser } from "@/context/SessionContext";
 import { useEffect } from "react";
 import dynamic from 'next/dynamic';
 import { Toaster } from "@/components/ui/sonner";
@@ -65,20 +63,9 @@ const queryClient = new QueryClient({
 });
 
 export default function MyApp({ Component, pageProps }: AppProps) {
-    // ClerkProvider types default to Server Components (async) in newer versions, 
-    // which confuses TypeScript in Pages Router files. Casting to any fixes this.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ClerkProviderWithTypes = ClerkProvider as unknown as React.ComponentType<any>;
-
     return (
-        <ClerkProviderWithTypes
-            appearance={{
-                baseTheme: dark,
-                variables: { colorPrimary: '#0070f3' }
-            }}
-            {...pageProps}
-        >
-            <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+            <SessionProvider>
                 <ErrorBoundary>
                     <ErrorProvider>
                         <AuthProvider>
@@ -105,7 +92,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
                         </AuthProvider>
                     </ErrorProvider>
                 </ErrorBoundary>
-            </QueryClientProvider>
-        </ClerkProviderWithTypes>
+            </SessionProvider>
+        </QueryClientProvider>
     );
 }

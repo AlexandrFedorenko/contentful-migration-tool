@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
-import * as fs from 'fs';
-import * as path from 'path';
+
+const SECRET_KEY = /token|authorization|password|secret|cookie/i;
 
 export type LogLevel = 'INFO' | 'WARN' | 'ERROR';
 
@@ -8,8 +8,10 @@ export const logger = {
     async log(level: LogLevel, action: string, message: string, details?: unknown, user?: { id?: string; email?: string }, logFile?: string) {
         try {
             const safeDetails = details ? JSON.parse(JSON.stringify(details, (key, value) => {
+                // Never persist credentials, even if a caller passes them by mistake
+                if (SECRET_KEY.test(key)) return '[redacted]';
                 if (value instanceof Error) {
-                    return { message: value.message, name: value.name, stack: value.stack };
+                    return { message: value.message, name: value.name };
                 }
                 return value;
             })) : undefined;
@@ -41,52 +43,5 @@ export const logger = {
 
     async error(action: string, message: string, details?: unknown, user?: { id?: string; email?: string }, logFile?: string) {
         return this.log('ERROR', action, message, details, user, logFile);
-    },
-
-    /**
-     * Scans cwd for any contentful-import-error-log*.json files,
-     * reads their content into memory, deletes the files from disk,
-     * and returns the parsed JSON content (to be stored in DB).
-     *
-     * Returns undefined if no log file was found.
-     */
-    async captureCliError(): Promise<string | undefined> {
-        try {
-            const logsDir = path.join(process.cwd(), 'backups', 'logs');
-            if (!fs.existsSync(logsDir)) return undefined;
-            const files = fs.readdirSync(logsDir);
-
-            const logFiles = files
-                .filter(f => f.startsWith('contentful-import-error-log') && f.endsWith('.json'))
-                .sort((a, b) =>
-                    fs.statSync(path.join(logsDir, b)).mtimeMs -
-                    fs.statSync(path.join(logsDir, a)).mtimeMs
-                );
-
-            if (logFiles.length === 0) return undefined;
-
-            // Read all error log files and combine their content
-            const allContent: unknown[] = [];
-            for (const logFile of logFiles) {
-                const filePath = path.join(logsDir, logFile);
-                try {
-                    const raw = fs.readFileSync(filePath, 'utf8');
-                    const parsed = JSON.parse(raw);
-                    allContent.push({ file: logFile, content: parsed });
-                } catch {
-                    allContent.push({ file: logFile, content: 'Failed to parse' });
-                } finally {
-                    // Always delete the file regardless of parse success
-                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                }
-            }
-
-            // Return the combined content as a JSON string to store in DB
-            return JSON.stringify(allContent.length === 1 ? allContent[0] : allContent, null, 2);
-        } catch (e) {
-            console.error('Failed to capture CLI error log:', e);
-        }
-        return undefined;
     }
 };
-

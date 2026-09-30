@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { followJobStream } from '@/utils/sse-client';
 import { autoSuggestLocaleMapping, LocaleMapping } from '@/utils/locale-filter';
 import type { BackupLocale } from '@/types/backup';
 
@@ -194,53 +195,37 @@ export function useSmartRestore() {
         setLogs([]);
 
         try {
-            const response = await fetch('/api/smart-restore/live-transfer-stream', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sourceSpaceId,
-                    sourceEnvironmentId,
-                    targetSpaceId,
-                    targetEnvironmentId,
-                    selectedContentTypeIds: Array.from(selectedCTIds),
-                    selectedLocales: Array.from(selectedLocales),
-                    localeMapping,
-                    options,
+            const end = await followJobStream(
+                () => fetch('/api/smart-restore/live-transfer-stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sourceSpaceId,
+                        sourceEnvironmentId,
+                        targetSpaceId,
+                        targetEnvironmentId,
+                        selectedContentTypeIds: Array.from(selectedCTIds),
+                        selectedLocales: Array.from(selectedLocales),
+                        localeMapping,
+                        options,
+                    }),
                 }),
-            });
-
-            if (!response.ok || !response.body) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-
-                // Parse SSE data lines
-                const lines = buffer.split('\n');
-                buffer = lines.pop() ?? '';
-
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    try {
-                        const event = JSON.parse(line.slice(6));
-                        if (event.type === 'log') {
-                            setLogs((prev: string[]) => [...prev, event.payload as string]);
-                        } else if (event.type === 'done') {
-                            setResultStats(event.payload.stats as TransferStats);
-                            setStatus('done');
-                        } else if (event.type === 'error') {
-                            setError(event.payload as string);
-                            setStatus('error');
-                        }
-                    } catch { /* malformed SSE line */ }
+                (data) => {
+                    const event = data as { type?: string; payload?: unknown };
+                    if (event.type === 'log') {
+                        setLogs((prev: string[]) => [...prev, event.payload as string]);
+                    } else if (event.type === 'done') {
+                        setResultStats((event.payload as { stats: TransferStats }).stats);
+                        setStatus('done');
+                    } else if (event.type === 'error') {
+                        setError(event.payload as string);
+                        setStatus('error');
+                    }
                 }
+            );
+            if (end.status !== 'SUCCEEDED') {
+                setError(end.error || 'Transfer failed');
+                setStatus('error');
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Transfer failed');

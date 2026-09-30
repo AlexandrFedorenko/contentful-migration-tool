@@ -1,115 +1,58 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth, clerkClient } from '@clerk/nextjs/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { HttpError, notFound } from '@/server/http-error';
+import { logger } from '@/utils/logger';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        // Verify admin status
-        const caller = await prisma.user.findUnique({
-            where: { clerkId: userId },
-            select: { id: true, role: true }
-        });
-
-        if (caller?.role !== 'ADMIN') {
-            return res.status(403).json({ success: false, error: 'Forbidden' });
-        }
-
-        if (req.method === 'GET') {
-            // Fetch all users with backup count and total stats
-            const users = await prisma.user.findMany({
-                orderBy: { createdAt: 'desc' },
-                select: {
-                    id: true,
-                    clerkId: true,
-                    email: true,
-                    firstName: true,
-                    lastName: true,
-                    displayName: true,
-                    role: true,
-                    createdAt: true,
-                    _count: {
-                        select: { backups: true, scripts: true, tokens: true }
-                    }
-                }
-            });
-
-            // Merge Clerk ban status (optional, but good for suspension)
-            const client = await clerkClient();
-            const clerkUsers = await client.users.getUserList({ limit: 500 }); // simplified
-
-            // Primary admin = oldest ADMIN account (cannot be modified)
-            const primaryAdmin = users
-                .filter(u => u.role === 'ADMIN')
-                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
-            
-            const enrichedUsers = users.map(user => {
-                const clerkUser = clerkUsers.data.find(cu => cu.id === user.clerkId);
-                return {
-                    ...user,
-                    isBanned: clerkUser?.banned || false,
-                    isPrimaryAdmin: primaryAdmin?.id === user.id,
-                };
-            });
-
-            return res.status(200).json({ success: true, data: enrichedUsers });
-        }
-
-        if (req.method === 'PUT') {
-            const { id, action, role } = req.body;
-
-            if (!id || !action) {
-                return res.status(400).json({ success: false, error: 'Missing target user id or action' });
-            }
-
-            const targetUser = await prisma.user.findUnique({ where: { id } });
-            if (!targetUser) return res.status(404).json({ success: false, error: 'User not found' });
-            if (targetUser.id === caller.id) return res.status(400).json({ success: false, error: 'Cannot modify your own account via this endpoint' });
-
-            // Block modifications to the primary admin (oldest ADMIN account)
-            const primaryAdmin = await prisma.user.findFirst({
-                where: { role: 'ADMIN' },
-                orderBy: { createdAt: 'asc' },
-                select: { id: true },
-            });
-            if (primaryAdmin && targetUser.id === primaryAdmin.id) {
-                return res.status(403).json({ success: false, error: 'Cannot modify the primary admin account' });
-            }
-
-            const client = await clerkClient();
-
-            if (action === 'change_role') {
-                if (role !== 'ADMIN' && role !== 'MEMBER') {
-                    return res.status(400).json({ success: false, error: 'Invalid role' });
-                }
-                const updatedUser = await prisma.user.update({
-                    where: { id },
-                    data: { role }
-                });
-                return res.status(200).json({ success: true, data: updatedUser, message: 'Role updated' });
-            }
-
-            if (action === 'suspend') {
-                await client.users.banUser(targetUser.clerkId);
-                return res.status(200).json({ success: true, message: 'User suspended successfully' });
-            }
-
-            if (action === 'unsuspend') {
-                await client.users.unbanUser(targetUser.clerkId);
-                return res.status(200).json({ success: true, message: 'User unsuspended successfully' });
-            }
-
-            return res.status(400).json({ success: false, error: 'Invalid action' });
-        }
-
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    } catch (error) {
-        console.error('Admin Users API error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
+/** The oldest administrator cannot be demoted or suspended by other admins. */
+async function primaryAdminId(): Promise<string | undefined> {
+    return (await prisma.user.findFirst({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' }, select: { id: true } }))?.id;
 }
+
+export default createApiHandler({
+    GET: route({
+        auth: 'admin',
+        handler: async () => {
+            const [users, primaryId] = await Promise.all([
+                prisma.user.findMany({
+                    orderBy: { createdAt: 'desc' },
+                    take: 1000,
+                    select: {
+                        id: true, email: true, firstName: true, lastName: true, displayName: true, role: true,
+                        createdAt: true, lastLoginAt: true, suspendedAt: true,
+                        _count: { select: { backups: true, jobs: true, tokens: true } },
+                    },
+                }),
+                primaryAdminId(),
+            ]);
+            return users.map((u) => ({ ...u, isBanned: Boolean(u.suspendedAt), isPrimaryAdmin: u.id === primaryId }));
+        },
+    }),
+    PUT: route({
+        auth: 'admin',
+        body: z.discriminatedUnion('action', [
+            z.object({ id: z.string().uuid(), action: z.literal('change_role'), role: z.enum(['ADMIN', 'MEMBER']) }),
+            z.object({ id: z.string().uuid(), action: z.literal('suspend') }),
+            z.object({ id: z.string().uuid(), action: z.literal('unsuspend') }),
+        ]),
+        handler: async (_req, _res, { user, body }) => {
+            const target = await prisma.user.findUnique({ where: { id: body.id }, select: { id: true, email: true } });
+            if (!target) throw notFound('User');
+            if (target.id === user.id) throw new HttpError(400, 'SELF_MODIFY', 'Cannot modify your own account via this endpoint');
+            if (target.id === (await primaryAdminId())) throw new HttpError(403, 'PRIMARY_ADMIN', 'Cannot modify the primary admin account');
+
+            if (body.action === 'change_role') {
+                const updated = await prisma.user.update({ where: { id: target.id }, data: { role: body.role }, select: { id: true, role: true } });
+                await logger.info('ADMIN_ROLE_CHANGE', `Role of ${target.email} set to ${body.role}`, { targetId: target.id }, user);
+                return updated;
+            }
+            const suspend = body.action === 'suspend';
+            await prisma.$transaction([
+                prisma.user.update({ where: { id: target.id }, data: { suspendedAt: suspend ? new Date() : null } }),
+                ...(suspend ? [prisma.session.deleteMany({ where: { userId: target.id } })] : []),
+            ]);
+            await logger.info(suspend ? 'ADMIN_SUSPEND' : 'ADMIN_UNSUSPEND', `${target.email} ${suspend ? 'suspended' : 'unsuspended'}`, { targetId: target.id }, user);
+            return { message: suspend ? 'User suspended successfully' : 'User unsuspended successfully' };
+        },
+    }),
+});

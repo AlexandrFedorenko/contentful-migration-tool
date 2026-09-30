@@ -1,78 +1,37 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
+import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { Prisma } from '@prisma/client';
+import { createApiHandler, route } from '@/server/api';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        // Verify admin status
-        const user = await prisma.user.findUnique({
-            where: { clerkId: userId },
-            select: { role: true }
-        });
-
-        if (user?.role !== 'ADMIN') {
-            return res.status(403).json({ success: false, error: 'Forbidden' });
-        }
-
-        if (req.method === 'GET') {
-            const {
-                page = '1',
-                limit = '50',
-                level,
-                action,
-                search,
-                status
-            } = req.query;
-
-            const pageNum = parseInt(page as string);
-            const limitNum = parseInt(limit as string);
-            const skip = (pageNum - 1) * limitNum;
-
+/** GET /api/admin/logs — paginated, filterable system log. */
+export default createApiHandler({
+    GET: route({
+        auth: 'admin',
+        query: z.object({
+            page: z.coerce.number().int().min(1).default(1),
+            limit: z.coerce.number().int().min(1).max(200).default(50),
+            level: z.enum(['INFO', 'WARN', 'ERROR']).optional(),
+            action: z.string().max(100).optional(),
+            status: z.enum(['SUCCESS', 'FAILED']).optional(),
+            search: z.string().max(200).optional(),
+        }),
+        handler: async (_req, _res, { query }) => {
             const where: Prisma.SystemLogWhereInput = {};
-            if (level) where.level = level as string;
-            if (action) where.action = action as string;
-            if (status) where.status = status as string;
-            if (search) {
+            if (query.level) where.level = query.level;
+            if (query.action) where.action = query.action;
+            if (query.status) where.status = query.status;
+            if (query.search) {
                 where.OR = [
-                    { message: { contains: search as string, mode: 'insensitive' } },
-                    { userEmail: { contains: search as string, mode: 'insensitive' } },
-                    { action: { contains: search as string, mode: 'insensitive' } }
+                    { message: { contains: query.search, mode: 'insensitive' } },
+                    { userEmail: { contains: query.search, mode: 'insensitive' } },
+                    { action: { contains: query.search, mode: 'insensitive' } },
                 ];
             }
-
             const [logs, total] = await Promise.all([
-                prisma.systemLog.findMany({
-                    where,
-                    orderBy: { timestamp: 'desc' },
-                    skip,
-                    take: limitNum,
-                }),
-                prisma.systemLog.count({ where })
+                prisma.systemLog.findMany({ where, orderBy: { timestamp: 'desc' }, skip: (query.page - 1) * query.limit, take: query.limit }),
+                prisma.systemLog.count({ where }),
             ]);
-
-            return res.status(200).json({
-                success: true,
-                data: {
-                    logs,
-                    pagination: {
-                        total,
-                        pages: Math.ceil(total / limitNum),
-                        currentPage: pageNum
-                    }
-                }
-            });
-        }
-
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    } catch (error) {
-        console.error('Admin Logs API Error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-}
+            return { logs, pagination: { total, pages: Math.ceil(total / query.limit), currentPage: query.page } };
+        },
+    }),
+});

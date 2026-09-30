@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../cma-preview';
-import { getAuth } from '@clerk/nextjs/server';
+import { getAuth } from "@/server/auth/session";
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/encryption';
 import { ContentfulManagement } from '@/utils/contentful-management';

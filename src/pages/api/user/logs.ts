@@ -1,106 +1,48 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
+import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { Prisma } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
+import { createApiHandler, route } from '@/server/api';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { userId } = getAuth(req);
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!dbUser) return res.status(404).json({ success: false, error: 'User not found' });
-
-    if (req.method === 'DELETE') {
-        try {
-            const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-            if (!dbUser) return res.status(404).json({ success: false, error: 'User not found' });
-
-            // 1. Find all logs with files to delete them from disk first
-            const logsWithFiles = await prisma.systemLog.findMany({
-                where: { userId: dbUser.id, logFile: { not: null } as Prisma.StringNullableFilter },
-                select: { logFile: true }
-            });
-
-            const appDir = process.cwd();
-            const safeDir = path.join(appDir, 'backups', 'logs');
-
-            for (const log of logsWithFiles) {
-                if (log.logFile) {
-                    const filePath = path.join(appDir, log.logFile);
-                    if (filePath.startsWith(safeDir) && fs.existsSync(filePath)) {
-                        try {
-                            fs.unlinkSync(filePath);
-                        } catch {
-                            // Ignore file deletion errors
-                        }
-                    }
-                }
+/** The current user's activity log. */
+export default createApiHandler({
+    GET: route({
+        query: z.object({
+            page: z.coerce.number().int().min(1).default(1),
+            limit: z.union([z.literal('all'), z.coerce.number().int().min(1).max(200)]).default(15),
+            level: z.string().max(10).optional(),
+            status: z.string().max(10).optional(),
+            search: z.string().max(200).optional(),
+        }),
+        handler: async (_req, _res, { user, query }) => {
+            // "all" is used for CSV export; still capped to keep the response bounded.
+            const take = query.limit === 'all' ? 5000 : query.limit;
+            const skip = query.limit === 'all' ? 0 : (query.page - 1) * take;
+            const where: Prisma.SystemLogWhereInput = { userId: user.id };
+            if (query.level && query.level !== 'ALL') where.level = query.level;
+            if (query.status && query.status !== 'ALL') where.status = query.status;
+            if (query.search) {
+                where.OR = [
+                    { message: { contains: query.search, mode: 'insensitive' } },
+                    { action: { contains: query.search, mode: 'insensitive' } },
+                ];
             }
-
-            // 2. Delete all log entries from DB
-            await prisma.systemLog.deleteMany({
-                where: { userId: dbUser.id }
-            });
-
-            return res.status(200).json({ success: true, message: 'All logs cleared' });
-        } catch {
-            return res.status(500).json({ success: false, error: 'Internal server error' });
-        }
-    }
-
-    if (req.method !== 'GET') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
-
-    try {
-        const { page = '1', limit = '15', level, status, search } = req.query;
-        const pageNum = parseInt(page as string, 10);
-        const isAll = limit === 'all';
-        const limitNum = isAll ? 0 : parseInt(limit as string, 10);
-        const skip = isAll ? 0 : (pageNum - 1) * limitNum;
-
-        const where: Prisma.SystemLogWhereInput = { userId: dbUser.id };
-        if (level && level !== 'ALL') where.level = level as string;
-        if (status && status !== 'ALL') where.status = status as string;
-        if (search) {
-            where.OR = [
-                { message: { contains: search as string, mode: 'insensitive' } },
-                { action: { contains: search as string, mode: 'insensitive' } }
-            ];
-        }
-
-        const [logs, total] = await Promise.all([
-            prisma.systemLog.findMany({
-                where,
-                orderBy: { timestamp: 'desc' },
-                skip,
-                ...(isAll ? {} : { take: limitNum }),
-                select: {
-                    id: true,
-                    level: true,
-                    action: true,
-                    message: true,
-                    details: true,
-                    status: true,
-                    timestamp: true,
-                    logFile: true,
-                }
-            }),
-            prisma.systemLog.count({ where })
-        ]);
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                logs,
-                total,
-                page: pageNum,
-                totalPages: isAll ? 1 : Math.ceil(total / limitNum),
-            }
-        });
-    } catch {
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-}
+            const [logs, total] = await Promise.all([
+                prisma.systemLog.findMany({
+                    where,
+                    orderBy: { timestamp: 'desc' },
+                    skip,
+                    take,
+                    select: { id: true, level: true, action: true, message: true, details: true, status: true, timestamp: true, logFile: true },
+                }),
+                prisma.systemLog.count({ where }),
+            ]);
+            return { logs, total, page: query.page, totalPages: query.limit === 'all' ? 1 : Math.ceil(total / take) };
+        },
+    }),
+    DELETE: route({
+        handler: async (_req, _res, { user }) => {
+            await prisma.systemLog.deleteMany({ where: { userId: user.id } });
+            return { message: 'All logs cleared' };
+        },
+    }),
+});

@@ -9,11 +9,11 @@ import { toast } from "sonner";
 import { format } from 'date-fns';
 import { parseError, instructionToString } from "@/utils/errorParser";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useUser } from '@clerk/nextjs';
+import { useUser } from "@/context/SessionContext";
 
 interface UserAdminRecord {
     id: string;
-    clerkId: string;
+    lastLoginAt?: string | null;
     email: string;
     firstName: string | null;
     lastName: string | null;
@@ -134,7 +134,7 @@ export function UserManagement() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
-                                        {u.isPrimaryAdmin || u.clerkId === currentUser?.id ? (
+                                        {u.isPrimaryAdmin || u.id === currentUser?.id ? (
                                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1 rounded-md border border-muted/40 bg-muted/20">
                                                 <Lock className="h-3 w-3" />
                                                 {u.isPrimaryAdmin ? 'Primary Admin' : 'You'}

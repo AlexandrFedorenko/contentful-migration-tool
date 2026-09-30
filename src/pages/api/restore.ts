@@ -1,339 +1,133 @@
-import { getAuth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/db";
-import { decrypt } from "@/lib/encryption";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { ContentfulCLI } from '@/utils/contentful-cli';
-import { RestoreResponse } from '@/types/api';
-import * as fs from 'fs';
-import * as path from 'path';
-import { createClient } from 'contentful-management';
-import { ContentfulManagement } from '@/utils/contentful-management';
-import { BackupService } from '@/utils/backup-service';
-import { logger } from "@/utils/logger";
-import { BackupData, BackupLocale } from "@/types/backup";
-import { Fields, Files } from 'formidable';
+import fsp from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import formidable, { type File } from 'formidable';
+import type { NextApiRequest } from 'next';
+import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { HttpError, badRequest } from '@/server/http-error';
+import { UPLOAD_ASSETS_FILE, UPLOAD_CONTENT_FILE } from '@/server/jobs/schemas';
+import { enqueueJob } from '@/server/jobs/queue';
+import { awaitJob } from '@/server/jobs/sse';
+import * as storage from '@/server/storage';
+import { resolveInside } from '@/server/validation';
 
-import { IncomingForm } from 'formidable';
-import AdmZip from 'adm-zip';
+// Body is parsed here: multipart uploads are streamed to disk, JSON is size-capped.
+export const config = { api: { bodyParser: false } };
 
-interface RestoreRequest {
-    spaceId: string;
-    backupId: string; // Changed from fileName
-    targetEnvironment: string;
-    clearEnvironment?: boolean;
-    localeMapping?: Record<string, string>;
-    options?: {
-        locales?: string[];
-        contentTypes?: string[];
-        clearEnvironment?: boolean | string;
-        includeAssets?: boolean;
-    };
-}
+const MAX_JSON_BODY = 100 * 1024 * 1024;
+const MAX_UPLOAD_JSON = 1024 * 1024 * 1024;
 
-export const config = {
-    api: {
-        bodyParser: false, // Disable for formidable
-    },
-};
-
-// Helper for formidable
-const parseForm = (req: NextApiRequest, maxMB: number): Promise<{ fields: Fields; files: Files }> => {
-    const form = new IncomingForm({
-        maxFileSize: maxMB * 1024 * 1024, // Use maxMB for file size limit
-        keepExtensions: true,
-    });
-    return new Promise((resolve, reject) => {
-        form.parse(req, (err, fields, files) => {
-            if (err) {
-                // Check for file size limit error specifically
-                if (err.message.includes('maxFileSize exceeded')) {
-                    reject(new Error(`File size limit exceeded. Max allowed: ${maxMB}MB.`, { cause: 413 }));
-                } else {
-                    reject(err);
-                }
-            }
-            resolve({ fields, files });
-        });
-    });
-};
-
-import { filterBackupContent, cleanupBackupLocales, transformBackupLocales } from '@/utils/restore-helpers';
-
-
-export default async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse<RestoreResponse>
-) {
-    if (req.method !== "POST") {
-        return res.status(405).json({ success: false, error: "Method not allowed" });
+async function readJsonBody(req: NextApiRequest): Promise<Record<string, unknown>> {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+        size += chunk.length;
+        if (size > MAX_JSON_BODY) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Request is too large. Upload the backup as a file instead.');
+        chunks.push(chunk as Buffer);
     }
-
-    const { userId } = getAuth(req);
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    let fields: Record<string, string | string[] | undefined> = {};
-    let files: Record<string, unknown> = {};
-    let assetsDir: string | null = null;
-    let tempZipPath: string | null = null;
-    let tempFilePath: string | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let userRecord: any = null;
-
     try {
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
-            const settings = await prisma.appSettings.findFirst();
-            const maxMB = settings?.maxAssetSizeMB || 1024;
-            const result = await parseForm(req, maxMB);
-            fields = result.fields;
-            files = result.files;
-
-            const getValue = (val: string | string[] | undefined) => Array.isArray(val) ? val[0] : val;
-
-            const spaceId = getValue(fields.spaceId);
-            const backupId = getValue(fields.backupId);
-            const targetEnvironment = getValue(fields.targetEnvironment);
-            const localeMappingStr = getValue(fields.localeMapping);
-            const optionsStr = getValue(fields.options);
-            const backupContentStr = getValue(fields.backupContent);
-            const fileName = getValue(fields.fileName);
-
-            const localeMapping = localeMappingStr ? JSON.parse(localeMappingStr) : undefined;
-            const options = optionsStr ? JSON.parse(optionsStr) : undefined;
-            const backupContent = backupContentStr ? JSON.parse(backupContentStr) : undefined;
-
-            fields = { spaceId, backupId, targetEnvironment, localeMapping, options, backupContent, fileName };
-
-            const backupFile = Array.isArray(files.backupFile) ? files.backupFile[0] : files.backupFile;
-            if (backupFile && backupFile.filepath) {
-                const fileContent = fs.readFileSync(backupFile.filepath, 'utf8');
-                fields.backupContent = JSON.parse(fileContent);
-                if (!fields.fileName) fields.fileName = backupFile.originalFilename || backupFile.newFilename || 'local-backup.json';
-            }
-
-            const zipFile = Array.isArray(files.assetZip) ? files.assetZip[0] : files.assetZip;
-            if (zipFile && zipFile.filepath) {
-                const filePath = zipFile.filepath;
-                tempZipPath = filePath;
-                const zip = new AdmZip(filePath);
-                const extractDir = path.join(process.cwd(), 'backups', 'tmp', `assets-${Date.now()}`);
-                if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
-
-                zip.extractAllTo(extractDir, true);
-                assetsDir = extractDir;
-
-                const assetsPath = path.join(extractDir, 'assets');
-                if (fs.existsSync(assetsPath)) {
-                    assetsDir = assetsPath;
-                }
-            }
-        } else {
-            // Manually parse JSON body since bodyParser is disabled
-            const getRawBody = async (req: NextApiRequest): Promise<string> => {
-                return new Promise((resolve, reject) => {
-                    let body = '';
-                    req.on('data', chunk => body += chunk);
-                    req.on('end', () => resolve(body));
-                    req.on('error', reject);
-                });
-            };
-            const rawBody = await getRawBody(req);
-            fields = rawBody ? JSON.parse(rawBody) : {};
-        }
-
-        const { spaceId, backupId, targetEnvironment, options, clearEnvironment, backupContent, localeMapping, fileName } = fields as unknown as RestoreRequest & { backupContent?: BackupData, fileName?: string };
-
-        if (!spaceId || (!backupId && !backupContent) || !targetEnvironment) {
-            return res.status(400).json({
-                success: false,
-                error: "Space ID, target environment, and either backup ID or backup content are required"
-            });
-        }
-
-        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-        userRecord = user;
-        if (!user || !user.contentfulToken) {
-            return res.status(401).json({ success: false, error: 'Contentful token not set in profile' });
-        }
-        const token = decrypt(user.contentfulToken);
-
-        // --- SERVER-SIDE ASSET DETECTION ---
-        // If includeAssets is true but no file was uploaded, check if server has it
-        if (options?.includeAssets && !assetsDir && backupId) {
-            const backup = await prisma.backupRecord.findFirst({
-                where: { id: backupId, userId: user.id }
-            });
-
-            if (backup && (backup as unknown as { hasZip: boolean }).hasZip) {
-                const zipName = backup.name.replace('.json', '-with-assets.zip');
-                const serverZipPath = path.join(process.cwd(), 'backups', spaceId, zipName);
-
-                if (fs.existsSync(serverZipPath)) {
-
-                    const zip = new AdmZip(serverZipPath);
-                    const extractDir = path.join(process.cwd(), 'backups', 'tmp', `assets-server-${Date.now()}`);
-                    if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
-
-                    zip.extractAllTo(extractDir, true);
-                    assetsDir = extractDir;
-
-                    const assetsPath = path.join(extractDir, 'assets');
-                    if (fs.existsSync(assetsPath)) {
-                        assetsDir = assetsPath;
-                    }
-                } else {
-                    // File not found, continue without assets
-                }
-            }
-        }
-        // End server-side asset detection
-
-        await logger.info('RESTORE_START', `Starting restore for space ${spaceId} to environment ${targetEnvironment}`, { backupId, includeAssets: !!assetsDir }, { id: user.id, email: user.email });
-
-        const shouldClear = clearEnvironment || options?.clearEnvironment === true || options?.clearEnvironment === 'true';
-
-        if (shouldClear) {
-            const client = createClient({ accessToken: token });
-            const space = await client.getSpace(spaceId);
-            const environment = await space.getEnvironment(targetEnvironment);
-
-            const deleteAll = async (type: 'Entry' | 'Asset' | 'ContentType') => {
-                let hasItems = true;
-                let skip = 0;
-                let stuckCount = 0;
-
-                while (hasItems && stuckCount < 5) { // Prevent infinite loops
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    let items: any;
-                    if (type === 'Entry') items = await environment.getEntries({ limit: 100, skip });
-                    else if (type === 'Asset') items = await environment.getAssets({ limit: 100, skip });
-                    else if (type === 'ContentType') items = await environment.getContentTypes({ limit: 100, skip });
-
-                    if (!items?.items || items.items.length === 0) {
-                        hasItems = false;
-                        break;
-                    }
-
-                    let deletedInThisBatch = 0;
-
-                    for (const item of items.items) {
-                        try {
-                            if (item.isPublished()) await item.unpublish();
-                        } catch {
-                            // Ignore unpublish errors
-                        }
-                        try {
-                            await item.delete();
-                            deletedInThisBatch++;
-                        } catch {
-                            // Ignore delete errors
-                        }
-                    }
-
-                    if (deletedInThisBatch === 0 && items.items.length > 0) {
-                        // We couldn't delete anything in this batch, try skipping them to see if others can be deleted
-                        skip += items.items.length;
-                        stuckCount++;
-                    } else {
-                        // Reset stuck count and skip if we made progress
-                        stuckCount = 0;
-                        skip = 0;
-                    }
-
-                    await new Promise(r => setTimeout(r, 1000)); // Respect rate limits
-                }
-            };
-
-            await deleteAll('Entry');
-            await deleteAll('Asset');
-            await deleteAll('ContentType');
-        }
-
-        let contentToRestore: BackupData | undefined;
-        if (backupContent) {
-            contentToRestore = backupContent;
-        } else {
-            contentToRestore = (await BackupService.getBackupContent(backupId, userId)) as BackupData;
-        }
-
-        if (contentToRestore && options && (options.locales || options.contentTypes)) {
-            contentToRestore = filterBackupContent(contentToRestore, options);
-        }
-
-        if (contentToRestore) {
-            try {
-                const targetLocales = await ContentfulManagement.getLocales(spaceId, targetEnvironment, token);
-                const targetLocaleCodes = new Set<string>(targetLocales.map((l: BackupLocale) => l.code));
-
-                if (localeMapping && Object.keys(localeMapping).length > 0) {
-                    contentToRestore = transformBackupLocales(contentToRestore, localeMapping);
-                    const mappedTargetCodes = new Set<string>(targetLocaleCodes);
-                    Object.values(localeMapping).forEach(targetCode => mappedTargetCodes.add(targetCode));
-                    contentToRestore = cleanupBackupLocales(contentToRestore!, mappedTargetCodes);
-                } else {
-                    const targetDefaultLocale = targetLocales.find((l: BackupLocale) => l.default)?.code;
-                    const sourceDefaultLocale = contentToRestore.locales?.find((l: BackupLocale) => l.default)?.code;
-                    if (targetDefaultLocale && sourceDefaultLocale && targetDefaultLocale !== sourceDefaultLocale) {
-                        const autoMapping = { [sourceDefaultLocale]: targetDefaultLocale };
-                        contentToRestore = transformBackupLocales(contentToRestore, autoMapping);
-                    }
-                    contentToRestore = cleanupBackupLocales(contentToRestore!, targetLocaleCodes);
-                }
-            } catch {
-                // Continue without locale transformation on error
-            }
-        }
-
-        const fileNameSafe = (fileName || backupId || 'restore-fallback').replace(/[^a-zA-Z0-9-_]/g, '_');
-        const tempFileName = `temp-restore-${Date.now()}-${fileNameSafe}.json`;
-        const backupDir = path.join(process.cwd(), 'backups', spaceId);
-        if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-
-        const tempBackupPath = path.join(backupDir, tempFileName);
-        fs.writeFileSync(tempBackupPath, JSON.stringify(contentToRestore, null, 2));
-        tempFilePath = tempBackupPath;
-
-        await ContentfulCLI.restoreBackup(
-            spaceId,
-            tempFileName,
-            targetEnvironment,
-            token,
-            (msg) => console.log(`[RESTORE CLI] ${msg}`),
-            false,
-            assetsDir || undefined
-        );
-
-        await logger.info('RESTORE_SUCCESS', `Successfully restored to ${targetEnvironment} in space ${spaceId}`, { spaceId, targetEnvironment }, { id: user.id, email: user.email });
-        return res.status(200).json({ success: true, data: {} });
-
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to restore backup';
-
-        // Capture detailed CLI error log if it exists
-        const cliErrorContent = await logger.captureCliError();
-
-        if (userRecord) {
-            await logger.error('RESTORE_ERROR', `Failed restore: ${errorMessage}`, { error, fields, cliErrorLog: cliErrorContent ? JSON.parse(cliErrorContent) : undefined }, { id: userRecord.id, email: userRecord.email });
-        }
-        return res.status(500).json({ success: false, error: errorMessage, details: cliErrorContent });
-    } finally {
-        // CLEANUP EVERYTHING
-        try {
-            if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-            if (tempZipPath && fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
-            if (assetsDir) {
-                // Determine the root extract dir (assetsDir might be extractDir/assets)
-                const extractDir = assetsDir.includes('tmp') ?
-                    (assetsDir.endsWith('assets') ? path.dirname(assetsDir) : assetsDir) :
-                    null;
-                if (extractDir && fs.existsSync(extractDir)) {
-                    fs.rmSync(extractDir, { recursive: true, force: true });
-                }
-            }
-        } catch {
-            // Ignore cleanup errors
-        }
+        return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch {
+        throw badRequest('Invalid JSON body');
     }
 }
+
+const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const jsonField = (v: string | undefined) => {
+    if (!v) return undefined;
+    try {
+        return JSON.parse(v);
+    } catch {
+        throw badRequest('Invalid form field');
+    }
+};
+
+/**
+ * POST /api/restore — restore a stored backup or an uploaded Contentful export
+ * (+ optional asset zip) into an environment. Runs as a background job; the target
+ * is snapshotted first. Accepts multipart/form-data or JSON.
+ */
+export default createApiHandler({
+    POST: route({
+        rateLimit: { limit: 10, windowSeconds: 60, bucket: 'jobs' },
+        handler: async (req, res, { user }) => {
+            const uploadId = randomUUID();
+            const uploadDir = resolveInside(storage.storagePath(...storage.keys.uploadDir(user.id)), uploadId);
+            let hasUpload = false;
+            let params: Record<string, unknown>;
+
+            try {
+                if ((req.headers['content-type'] || '').includes('multipart/form-data')) {
+                    const settings = await prisma.appSettings.findFirst();
+                    const maxZip = (settings?.maxAssetSizeMB ?? 1024) * 1024 * 1024;
+                    await storage.ensureDir(uploadDir);
+                    const form = formidable({
+                        uploadDir,
+                        maxFiles: 2,
+                        maxFileSize: Math.max(maxZip, MAX_UPLOAD_JSON),
+                        maxTotalFileSize: maxZip + MAX_UPLOAD_JSON,
+                        maxFieldsSize: 50 * 1024 * 1024,
+                        filter: ({ name }) => name === 'backupFile' || name === 'assetZip',
+                    });
+                    const [fields, files] = await form.parse(req);
+                    const backupFile = files.backupFile?.[0] as File | undefined;
+                    const assetZip = files.assetZip?.[0] as File | undefined;
+                    if (backupFile) {
+                        await fsp.rename(backupFile.filepath, path.join(uploadDir, UPLOAD_CONTENT_FILE));
+                        hasUpload = true;
+                    } else if (first(fields.backupContent)) {
+                        await fsp.writeFile(path.join(uploadDir, UPLOAD_CONTENT_FILE), first(fields.backupContent)!);
+                        hasUpload = true;
+                    }
+                    if (assetZip) await fsp.rename(assetZip.filepath, path.join(uploadDir, UPLOAD_ASSETS_FILE));
+
+                    params = {
+                        spaceId: first(fields.spaceId),
+                        targetEnvironment: first(fields.targetEnvironment),
+                        backupId: first(fields.backupId) || undefined,
+                        fileName: first(fields.fileName),
+                        localeMapping: jsonField(first(fields.localeMapping)),
+                        options: jsonField(first(fields.options)) ?? {},
+                    };
+                } else {
+                    const body = await readJsonBody(req);
+                    if (body.backupContent) {
+                        await storage.ensureDir(uploadDir);
+                        await fsp.writeFile(path.join(uploadDir, UPLOAD_CONTENT_FILE), JSON.stringify(body.backupContent));
+                        hasUpload = true;
+                    }
+                    params = {
+                        spaceId: body.spaceId,
+                        targetEnvironment: body.targetEnvironment,
+                        backupId: body.backupId || undefined,
+                        fileName: body.fileName,
+                        localeMapping: body.localeMapping,
+                        options: { ...(body.options as object ?? {}), ...(body.clearEnvironment !== undefined ? { clearEnvironment: body.clearEnvironment } : {}) },
+                    };
+                }
+
+                if (hasUpload) {
+                    params.uploadId = uploadId;
+                    delete params.backupId;
+                }
+                if (params.options && typeof params.options === 'object') {
+                    const o = params.options as Record<string, unknown>;
+                    delete o.backupFile;
+                    delete o.assetFile;
+                }
+
+                const jobId = await enqueueJob(user.id, 'restore', params);
+                res.setHeader('X-Job-Id', jobId);
+                const end = await awaitJob(req, jobId);
+                if (!end) return;
+                if (end.status !== 'SUCCEEDED') throw new HttpError(500, 'RESTORE_FAILED', end.error || 'Restore failed');
+                return {};
+            } catch (error) {
+                // The job removes the upload when it runs; clean up here if it never started.
+                if (!res.getHeader('X-Job-Id')) await fsp.rm(uploadDir, { recursive: true, force: true }).catch(() => undefined);
+                throw error;
+            }
+        },
+    }),
+});

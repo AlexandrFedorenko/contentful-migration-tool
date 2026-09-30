@@ -192,7 +192,7 @@ export default function BackupPage() {
             // Determine correct download URL (ZIP vs JSON)
             let downloadUrl;
             if (targetBackup.hasZip) {
-                downloadUrl = `/api/download-transient-zip?spaceId=${state.spaceId}&fileName=${encodeURIComponent(targetBackup.name)}`;
+                downloadUrl = `/api/download-backup?backupId=${encodeURIComponent(targetBackup.id ?? '')}&format=zip`;
             } else {
                 downloadUrl = `/api/download-backup?spaceId=${state.spaceId}&backupId=${targetBackup.id}&fileName=${encodeURIComponent(targetBackup.name)}`;
             }

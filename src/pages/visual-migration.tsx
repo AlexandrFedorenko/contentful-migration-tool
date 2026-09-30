@@ -44,6 +44,7 @@ import { CodeEditorPanel } from '@/components/VisualMigration/CodeEditorPanel';
 import { ActionButtons } from '@/components/VisualMigration/ActionButtons';
 import { MigrationTemplate } from '@/templates/migration-templates';
 import { generateMigrationCode } from '@/utils/code-generator';
+import { followJobStream } from '@/utils/sse-client';
 import { parseError, instructionToString } from '@/utils/errorParser';
 import { api } from '@/utils/api';
 import { useTheme } from '@/context/ThemeContext';
@@ -158,57 +159,34 @@ export default function VisualMigrationPage() {
         setLogs([{ message: 'Starting migration protocol...', type: 'info' }]);
 
         try {
-            const response = await fetch('/api/visual-migrate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    spaceId: selectedSpaceId,
-                    environmentId: selectedTargetEnv,
-                    steps: stepsToRun
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                const message = errorData.error || errorData.message || 'Migration request failed';
-                const instruction = parseError(message);
-                setLogs(prev => [...prev, { message: instructionToString(instruction), type: 'error' }]);
-                setIsRunning(false);
-                return;
-            }
-
-            if (response.body) {
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n').filter(line => line.trim());
-
-                    for (const line of lines) {
-                        try {
-                            const data = JSON.parse(line.replace('data: ', ''));
-
-                            if (data.type === 'error') {
-                                const instruction = parseError(data.message);
-                                const translatedError = instructionToString(instruction);
-                                setLogs(prev => [...prev, { ...data, message: translatedError }]);
-                                setResultSuccess(false);
-                                setResultErrorMessage(data.message);
-                            } else {
-                                setLogs(prev => [...prev, data]);
-                                if (data.type === 'success' && data.message.includes('successfully')) {
-                                    setResultSuccess(true);
-                                }
-                            }
-                        } catch (e) {
-                            console.error('Migration log parse error:', e, 'Line:', line);
-                        }
-                    }
+            let failed = false;
+            const handleLine = (data: { message: string; type: 'info' | 'error' | 'success' }) => {
+                if (data.type === 'error') {
+                    failed = true;
+                    const translatedError = instructionToString(parseError(data.message));
+                    setLogs(prev => [...prev, { ...data, message: translatedError }]);
+                    setResultSuccess(false);
+                    setResultErrorMessage(data.message);
+                } else {
+                    setLogs(prev => [...prev, data]);
+                    if (data.type === 'success') setResultSuccess(true);
                 }
+            };
+
+            const end = await followJobStream(
+                () => fetch('/api/visual-migrate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        spaceId: selectedSpaceId,
+                        environmentId: selectedTargetEnv,
+                        steps: stepsToRun
+                    })
+                }),
+                (data) => handleLine(data as { message: string; type: 'info' | 'error' | 'success' })
+            );
+            if (end.status !== 'SUCCEEDED' && !failed) {
+                handleLine({ message: end.error || 'Migration failed', type: 'error' });
             }
         } catch (error) {
             const instruction = parseError(error instanceof Error ? error.message : 'Unknown error');

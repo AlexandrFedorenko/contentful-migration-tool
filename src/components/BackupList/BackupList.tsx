@@ -184,7 +184,7 @@ export default function BackupList({ selectedBackupForRestore, onBackupSelect }:
   }, [state.spaceId]);
 
   const handleDownloadZip = useCallback((backup: Backup) => {
-    const downloadUrl = `/api/download-transient-zip?spaceId=${state.spaceId}&fileName=${encodeURIComponent(backup.name)}`;
+    const downloadUrl = `/api/download-backup?backupId=${encodeURIComponent(backup.id ?? '')}&format=zip`;
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = backup.name.replace('.json', '-with-assets.zip');

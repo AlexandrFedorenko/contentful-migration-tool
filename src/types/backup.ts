@@ -4,6 +4,8 @@ export interface Backup {
   time: number;
   id?: string;
   hasZip?: boolean;
+  sizeBytes?: number;
+  environmentId?: string;
 }
 
 export interface BackupContentType {

@@ -1,49 +1,35 @@
 /** @type {import('next').NextConfig} */
+const securityHeaders = [
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+];
+
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  poweredByHeader: false,
 
-  // Tell Next.js to treat these as external Node.js modules and NOT bundle them
-  serverExternalPackages: ['contentful-cli', 'contentful-management', '@prisma/client', 'prisma'],
+  // Server-only dependencies that must not be bundled by webpack
+  serverExternalPackages: [
+    'contentful-management',
+    'contentful-export',
+    'contentful-import',
+    'contentful-migration',
+    '@prisma/client',
+    'prisma',
+    'bullmq',
+    'ioredis',
+  ],
 
   experimental: {
-    // Faster compilation for large component libraries
-    optimizePackageImports: [
-      '@clerk/nextjs',
-      'lucide-react',
-    ],
-    // Allow larger payloads through middleware
-    middlewareClientMaxBodySize: 5000000000,
+    optimizePackageImports: ['lucide-react'],
   },
 
-
-
   webpack: (config, { isServer }) => {
-    // Exclude unnecessary directories from webpack watching
-    config.watchOptions = {
-      ...config.watchOptions,
-      ignored: [
-        '**/node_modules',
-        '**/.git',
-        '**/.next',
-        '**/dist',
-        '**/backups',
-        '**/.idea',
-        '**/.vscode',
-        '**/.devcontainer',
-        '**/coverage',
-        '**/test-results',
-        '**/docker',
-        '**/scripts',
-        '**/temp',
-        '**/postgres-data',
-      ],
-    };
-
-    // Optimize module resolution
-    config.resolve.modules = ['node_modules', 'src'];
-
-    // Ignore server-only modules on client side
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -51,38 +37,20 @@ const nextConfig = {
         net: false,
         tls: false,
         child_process: false,
-        'cross-spawn': false,
       };
     }
-
     return config;
   },
 
   images: {
     unoptimized: true,
-    disableStaticImages: true,
-    remotePatterns: [
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.ctfassets.net',
-      },
-    ],
+    remotePatterns: [{ protocol: 'https', hostname: 'images.ctfassets.net' }],
   },
 
   async headers() {
     return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type' },
-        ],
-      },
+      { source: '/:path*', headers: securityHeaders },
+      { source: '/api/:path*', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
     ];
   },
 };

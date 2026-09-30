@@ -1,48 +1,17 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { z } from 'zod';
+import { createApiHandler, route } from '@/server/api';
+import { notFound } from '@/server/http-error';
 import { BackupService } from '@/utils/backup-service';
-import { getAuth } from '@clerk/nextjs/server';
+import { logger } from '@/utils/logger';
 
-interface DeleteBackupRequest {
-    spaceId: string;
-    backupId: string; // Changed from fileName
-    fileName?: string; // Legacy support or just ignored
-}
-
-interface DeleteBackupResponse {
-    success: boolean;
-    error?: string;
-}
-
-export default async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse<DeleteBackupResponse>
-) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
-
-    const { userId } = getAuth(req);
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        const { backupId }: DeleteBackupRequest = req.body;
-
-        if (!backupId) {
-            return res.status(400).json({
-                success: false,
-                error: 'Backup ID is required'
-            });
-        }
-
-        await BackupService.deleteBackup(backupId, userId);
-
-        return res.status(200).json({ success: true });
-    } catch (error) {
-        return res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to delete backup'
-        });
-    }
-}
+/** POST /api/deleteBackup { backupId } — delete one of the user's backups and its files. */
+export default createApiHandler({
+    POST: route({
+        body: z.object({ backupId: z.string().uuid() }).passthrough(),
+        handler: async (_req, _res, { user, body }) => {
+            if (!(await BackupService.deleteBackup(body.backupId, user.id))) throw notFound('Backup');
+            await logger.info('BACKUP_DELETE', 'Backup deleted', { backupId: body.backupId }, user);
+            return null;
+        },
+    }),
+});

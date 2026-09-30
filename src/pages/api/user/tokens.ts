@@ -1,167 +1,75 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { encrypt } from '@/lib/encryption';
+import { createApiHandler, route } from '@/server/api';
+import { HttpError, notFound } from '@/server/http-error';
+import { encryptToken, fetchContentfulProfile } from '@/server/contentful/credentials';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { userId } = getAuth(req);
+const MAX_TOKENS = 10;
+const PUBLIC_FIELDS = { id: true, alias: true, kind: true, isActive: true, lastUsedAt: true, createdAt: true, updatedAt: true } as const;
 
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        const user = await prisma.user.findUnique({
-            where: { clerkId: userId },
-            select: { id: true, contentfulToken: true }
-        });
-
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'User not found' });
-        }
-
-        if (req.method === 'GET') {
-            const tokens = await prisma.contentfulToken.findMany({
-                where: { userId: user.id },
-                orderBy: { createdAt: 'desc' },
-                select: {
-                    id: true,
-                    alias: true,
-                    isActive: true,
-                    createdAt: true,
-                    updatedAt: true
-                }
-            });
-            return res.status(200).json({ success: true, data: tokens });
-        }
-
-        if (req.method === 'POST') {
-            const { alias, token } = req.body;
-            
-            if (!alias || !token) {
-                return res.status(400).json({ success: false, error: 'Alias and token are required' });
-            }
-
-            const encryptedToken = encrypt(token.trim());
-            
-            // Logic Change: All tokens are inactive by default (manual activation required)
-            const newToken = await prisma.contentfulToken.create({
-                data: {
-                    alias: alias.trim(),
-                    token: encryptedToken,
-                    userId: user.id,
-                    isActive: false,
-                }
-            });
-
-            return res.status(201).json({ 
-                success: true, 
-                data: {
-                    id: newToken.id,
-                    alias: newToken.alias,
-                    isActive: newToken.isActive,
-                    createdAt: newToken.createdAt
-                } 
-            });
-        }
-
-        if (req.method === 'PUT') {
-            const { id, action, alias } = req.body;
-
-            if (action === 'rename') {
-                if (!alias) return res.status(400).json({ success: false, error: 'Alias is required' });
-                
-                const updatedToken = await prisma.contentfulToken.update({
-                    where: { id },
-                    data: { alias: alias.trim() }
-                });
-
-                return res.status(200).json({ success: true, data: updatedToken });
-            }
-
-            if (action === 'activate') {
-                // Ensure the token exists and belongs to the user
-                const targetToken = await prisma.contentfulToken.findUnique({
-                    where: { id }
-                });
-
-                if (!targetToken || targetToken.userId !== user.id) {
-                    return res.status(404).json({ success: false, error: 'Token not found' });
-                }
-
-                // Deactivate all tokens for this user
-                await prisma.contentfulToken.updateMany({
-                    where: { userId: user.id },
-                    data: { isActive: false }
-                });
-
-                // Activate target token
-                await prisma.contentfulToken.update({
-                    where: { id },
-                    data: { isActive: true }
-                });
-
-                // Sync active token to User for backward compatibility
-                await prisma.user.update({
-                    where: { id: user.id },
-                    data: { contentfulToken: targetToken.token }
-                });
-
-                return res.status(200).json({ success: true, message: 'Token activated' });
-            }
-
-            return res.status(400).json({ success: false, error: 'Invalid action' });
-        }
-
-        if (req.method === 'DELETE') {
-            const { id } = req.query;
-
-            if (!id || typeof id !== 'string') {
-                return res.status(400).json({ success: false, error: 'Token ID required' });
-            }
-
-            const targetToken = await prisma.contentfulToken.findUnique({
-                where: { id }
-            });
-
-            if (!targetToken || targetToken.userId !== user.id) {
-                return res.status(404).json({ success: false, error: 'Token not found' });
-            }
-
-            await prisma.contentfulToken.delete({
-                where: { id }
-            });
-
-            // If we deleted the active token, we should either set another active or clear User.contentfulToken
-            if (targetToken.isActive) {
-                const nextToken = await prisma.contentfulToken.findFirst({
-                    where: { userId: user.id },
-                    orderBy: { createdAt: 'desc' }
-                });
-
-                if (nextToken) {
-                    await prisma.contentfulToken.update({
-                        where: { id: nextToken.id },
-                        data: { isActive: true }
-                    });
-                    await prisma.user.update({
-                        where: { id: user.id },
-                        data: { contentfulToken: nextToken.token }
-                    });
-                } else {
-                    await prisma.user.update({
-                        where: { id: user.id },
-                        data: { contentfulToken: null }
-                    });
-                }
-            }
-
-            return res.status(200).json({ success: true, message: 'Token deleted' });
-        }
-
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    } catch (error) {
-        console.error('User Tokens API error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
+async function ownToken(userId: string, id: string) {
+    const token = await prisma.contentfulToken.findFirst({ where: { id, userId }, select: { id: true, isActive: true } });
+    if (!token) throw notFound('Token');
+    return token;
 }
+
+/**
+ * Contentful connections of the current user. Token values are write-only:
+ * they are validated with Contentful, stored encrypted and never returned.
+ */
+export default createApiHandler({
+    GET: route({
+        handler: async (_req, _res, { user }) =>
+            prisma.contentfulToken.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, select: PUBLIC_FIELDS }),
+    }),
+
+    POST: route({
+        body: z.object({ alias: z.string().trim().min(1).max(60), token: z.string().trim().min(20).max(200) }),
+        rateLimit: { limit: 10, windowSeconds: 60 },
+        handler: async (_req, res, { user, body }) => {
+            if ((await prisma.contentfulToken.count({ where: { userId: user.id } })) >= MAX_TOKENS) {
+                throw new HttpError(400, 'TOKEN_LIMIT', `You can store up to ${MAX_TOKENS} tokens`);
+            }
+            await fetchContentfulProfile(body.token);
+            const created = await prisma.contentfulToken.create({
+                data: { userId: user.id, alias: body.alias, token: encryptToken(user.id, body.token), kind: 'PAT', isActive: false },
+                select: PUBLIC_FIELDS,
+            });
+            res.status(201);
+            return created;
+        },
+    }),
+
+    PUT: route({
+        body: z.discriminatedUnion('action', [
+            z.object({ action: z.literal('rename'), id: z.string().uuid(), alias: z.string().trim().min(1).max(60) }),
+            z.object({ action: z.literal('activate'), id: z.string().uuid() }),
+        ]),
+        handler: async (_req, _res, { user, body }) => {
+            await ownToken(user.id, body.id);
+            if (body.action === 'rename') {
+                return prisma.contentfulToken.update({ where: { id: body.id }, data: { alias: body.alias }, select: PUBLIC_FIELDS });
+            }
+            await prisma.$transaction([
+                prisma.contentfulToken.updateMany({ where: { userId: user.id }, data: { isActive: false } }),
+                prisma.contentfulToken.update({ where: { id: body.id }, data: { isActive: true } }),
+            ]);
+            return { message: 'Token activated' };
+        },
+    }),
+
+    DELETE: route({
+        query: z.object({ id: z.string().uuid() }),
+        handler: async (_req, _res, { user, query }) => {
+            const target = await ownToken(user.id, query.id);
+            await prisma.$transaction(async (tx) => {
+                await tx.contentfulToken.delete({ where: { id: target.id } });
+                if (target.isActive) {
+                    const next = await tx.contentfulToken.findFirst({ where: { userId: user.id }, orderBy: { createdAt: 'desc' } });
+                    if (next) await tx.contentfulToken.update({ where: { id: next.id }, data: { isActive: true } });
+                }
+            });
+            return { message: 'Token deleted' };
+        },
+    }),
+});

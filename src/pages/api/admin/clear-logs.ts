@@ -1,91 +1,26 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
-import { PrismaClient, Prisma } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
+import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { logger } from '@/utils/logger';
 
-const prisma = new PrismaClient();
+const MONTHS = { '1m': 1, '3m': 3, '6m': 6 } as const;
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
-
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    try {
-        const user = await prisma.user.findUnique({
-            where: { clerkId: userId },
-            select: { role: true }
-        });
-
-        if (user?.role !== 'ADMIN') {
-            return res.status(403).json({ success: false, error: 'Forbidden' });
-        }
-
-        const { retention } = req.body;
-
-        if (!retention) {
-            return res.status(400).json({ success: false, error: 'Retention policy is required' });
-        }
-
-        let whereClause: Prisma.SystemLogWhereInput = {};
-        const retentionMonths: Record<string, number> = {
-            '1m': 1,
-            '3m': 3,
-            '6m': 6,
-        };
-
-        if (retention in retentionMonths) {
-            const cutoffDate = new Date();
-            cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths[retention]);
-            whereClause = {
-                timestamp: {
-                    lt: cutoffDate
-                }
-            };
-        } else if (retention !== 'all') {
-            return res.status(400).json({ success: false, error: 'Invalid retention policy' });
-        }
-
-        // 1. Find logs with associated files to delete them from disk
-        const logsWithFiles = await prisma.systemLog.findMany({
-            where: {
-                ...whereClause,
-                logFile: { not: null }
-            },
-            select: { logFile: true }
-        });
-
-        for (const log of logsWithFiles) {
-            if (log.logFile) {
-                try {
-                    const fullPath = path.join(process.cwd(), log.logFile);
-                    fs.rmSync(fullPath, { force: true });
-                } catch {
-                    // Ignore file deletion errors
-                }
+/** POST /api/admin/clear-logs { retention: '1m' | '3m' | '6m' | 'all' } — delete old system logs. */
+export default createApiHandler({
+    POST: route({
+        auth: 'admin',
+        body: z.object({ retention: z.enum(['1m', '3m', '6m', 'all']) }),
+        handler: async (_req, _res, { user, body }) => {
+            let where: Prisma.SystemLogWhereInput = {};
+            if (body.retention !== 'all') {
+                const cutoff = new Date();
+                cutoff.setMonth(cutoff.getMonth() - MONTHS[body.retention]);
+                where = { timestamp: { lt: cutoff } };
             }
-        }
-
-        // 2. Clear database records
-        const deleted = await prisma.systemLog.deleteMany({
-            where: whereClause
-        });
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                count: deleted.count,
-                message: `Successfully deleted ${deleted.count} logs and associated files`
-            }
-        });
-
-    } catch {
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-}
+            const { count } = await prisma.systemLog.deleteMany({ where });
+            await logger.info('ADMIN_CLEAR_LOGS', `Deleted ${count} logs (retention ${body.retention})`, { count }, user);
+            return { count, message: `Successfully deleted ${count} logs` };
+        },
+    }),
+});

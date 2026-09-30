@@ -96,8 +96,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
                 })
             });
 
-            const data = await response.json();
-            setPreviewData(data);
+            const body = await response.json();
+            setPreviewData(body.success ? body.data : { error: body.error || 'Preview failed' });
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             setPreviewData({ error: errorMessage });

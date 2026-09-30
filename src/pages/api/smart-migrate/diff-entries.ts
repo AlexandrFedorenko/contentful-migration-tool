@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@clerk/nextjs/server';
-import { prisma } from '@/lib/db';
-import { decrypt } from '@/lib/encryption';
+import { requireUser, publicErrorMessage } from '@/server/api';
+import { findActiveToken } from '@/server/contentful/credentials';
+import { isValidEnvironmentId, isValidSpaceId } from '@/server/validation';
 import { ContentfulManagement } from '@/utils/contentful-management';
 import type { EntryDiffItem } from '@/types/smart-migrate';
 
@@ -73,11 +73,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    const { userId } = getAuth(req);
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user?.contentfulToken) {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const token = await findActiveToken(user.id);
+    if (!token) {
         return res.status(400).json({ success: false, error: 'Contentful token not configured' });
     }
 
@@ -88,12 +87,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             error: 'sourceSpaceId, sourceEnvId, targetSpaceId, targetEnvId, contentTypeId are required',
         });
     }
+    if (!isValidSpaceId(sourceSpaceId) || !isValidSpaceId(targetSpaceId) || !isValidEnvironmentId(sourceEnvId) || !isValidEnvironmentId(targetEnvId)) {
+        return res.status(400).json({ success: false, error: 'Invalid space or environment id' });
+    }
 
     const limit = Math.max(1, Math.min(1000, parseInt((req.query.limit as string) ?? '100', 10)));
     const skip = Math.max(0, parseInt((req.query.skip as string) ?? '0', 10));
 
     try {
-        const token = decrypt(user.contentfulToken);
         const client = ContentfulManagement.getClient(token);
 
         const isCrossSpace = sourceSpaceId !== targetSpaceId;
@@ -248,6 +249,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
     } catch (error) {
         console.error('[DIFF ENTRIES ERROR]', error);
-        return res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Failed to compute entry diff' });
+        return res.status(500).json({ success: false, error: publicErrorMessage(error, 'Failed to compute entry diff') });
     }
 }

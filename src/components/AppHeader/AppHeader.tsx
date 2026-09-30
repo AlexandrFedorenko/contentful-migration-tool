@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from "@/context/ThemeContext";
 import { useGlobalContext } from "@/context/GlobalContext";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useSession, useUser } from "@/context/SessionContext";
 import { Button } from "@/components/ui/button";
 import {
     Sheet,
@@ -48,7 +48,7 @@ const AppHeader = React.memo(function AppHeader() {
     const { mode, toggleTheme } = useTheme();
     const { dispatch } = useGlobalContext();
     const { isSignedIn, user } = useUser();
-    const { signOut } = useClerk();
+    const { signOut } = useSession();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
     const [localDisplayName, setLocalDisplayName] = useState(() => {

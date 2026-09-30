@@ -13,7 +13,7 @@ import {
     ChevronRight,
     Shield
 } from 'lucide-react';
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SessionContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import {
     Card,

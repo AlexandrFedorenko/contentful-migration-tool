@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient, ClientAPI, Environment as CMAEnvironment } from 'contentful-management';
+import type { ClientAPI, Environment as CMAEnvironment } from 'contentful-management';
+import { createCmaClient } from '@/server/contentful/client';
 import { Environment, Space } from '@/types/common';
 import { BackupData } from '@/types/backup';
 
@@ -75,11 +76,7 @@ export interface Asset {
 
 export class ContentfulManagement {
   public static getClient(token: string, host?: string): ClientAPI {
-    if (!token) throw new Error('Contentful Management Token required');
-    return createClient({
-      accessToken: token,
-      host: host || 'api.contentful.com'
-    });
+    return createCmaClient(token, { host });
   }
 
   private static async getEnvironment(spaceId: string, environmentId: string, token: string): Promise<CMAEnvironment> {
@@ -105,18 +102,10 @@ export class ContentfulManagement {
     return allItems;
   }
 
-  static async getSpaces(token: string): Promise<Space[]> {
-    try {
-      const client = this.getClient(token);
-      const response = await client.getSpaces();
-      return response.items.map((space: ContentfulSpace) => ({
-        id: space.sys.id,
-        name: space.name
-      }));
-    } catch (error) {
-      console.error(`[Management API] getSpaces Error:`, error);
-      throw error;
-    }
+  static async getSpaces(token: string, host?: string): Promise<Space[]> {
+    const client = this.getClient(token, host);
+    const spaces = await this.fetchAll<ContentfulSpace>((q) => client.getSpaces(q) as any, 100);
+    return spaces.map((space) => ({ id: space.sys.id, name: space.name }));
   }
 
   static async getEnvironments(spaceId: string, token: string): Promise<Environment[]> {

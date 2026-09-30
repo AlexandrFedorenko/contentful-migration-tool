@@ -1,97 +1,44 @@
-import { getAuth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/db";
-import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from 'zod';
+import { prisma } from '@/lib/db';
+import { createApiHandler, route } from '@/server/api';
+import { logger } from '@/utils/logger';
 
-export default async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse
-) {
-    const { userId } = getAuth(req);
+const PUBLIC_FIELDS = {
+    betaBannerEnabled: true, betaBannerText: true, tickerEnabled: true, tickerText: true,
+    maxAssetSizeMB: true, maxBackupsPerUser: true, enableAssetBackups: true, updatedAt: true,
+} as const;
 
-    if (req.method === "GET") {
-        try {
-            // Fetch settings, or create default if not exists
-            let settings = await prisma.appSettings.findFirst();
-
-            if (!settings) {
-                settings = await prisma.appSettings.create({
-                    data: {
-                        id: "default",
-                        betaBannerEnabled: true,
-                        betaBannerText: "🚀 This is a beta version of the app",
-                        maxAssetSizeMB: 1024,
-                        maxBackupsPerUser: 1,
-                        enableAssetBackups: true,
-                    },
-                });
-            }
-
-            return res.status(200).json({
-                success: true,
-                data: settings
-            });
-        } catch (error) {
-            console.error("Failed to fetch settings:", error);
-            return res.status(500).json({ error: "Failed to fetch settings" });
-        }
-    }
-
-    if (req.method === "POST") {
-        if (!userId) {
-            return res.status(401).json({ error: "Unauthorized" });
-        }
-
-        try {
-            // Verify user is admin
-            const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-            if (!user || user.role !== "ADMIN") {
-                return res.status(403).json({ error: "Forbidden: Admins only" });
-            }
-
-            const {
-                betaBannerEnabled,
-                betaBannerText,
-                tickerEnabled,
-                tickerText,
-                maxAssetSizeMB,
-                maxBackupsPerUser,
-                enableAssetBackups
-            } = req.body;
-
+/**
+ * GET  /api/settings — public app settings (banner, ticker, limits); readable without a session.
+ * POST /api/settings — update them (admin).
+ */
+export default createApiHandler({
+    GET: route({
+        auth: 'public',
+        handler: async () =>
+            (await prisma.appSettings.findUnique({ where: { id: 'default' }, select: PUBLIC_FIELDS })) ??
+            prisma.appSettings.create({ data: { id: 'default' }, select: PUBLIC_FIELDS }),
+    }),
+    POST: route({
+        auth: 'admin',
+        body: z.object({
+            betaBannerEnabled: z.boolean().optional(),
+            betaBannerText: z.string().max(300).optional(),
+            tickerEnabled: z.boolean().optional(),
+            tickerText: z.string().max(500).optional(),
+            maxAssetSizeMB: z.coerce.number().int().min(1).max(20_480).optional(),
+            maxBackupsPerUser: z.coerce.number().int().min(0).max(100).optional(),
+            enableAssetBackups: z.boolean().optional(),
+        }),
+        handler: async (_req, _res, { user, body }) => {
             const settings = await prisma.appSettings.upsert({
-                where: { id: "default" },
-                update: {
-                    betaBannerEnabled,
-                    betaBannerText,
-                    tickerEnabled,
-                    tickerText,
-                    maxAssetSizeMB: maxAssetSizeMB ? parseInt(maxAssetSizeMB as string) : 1024,
-                    maxBackupsPerUser: maxBackupsPerUser ? parseInt(maxBackupsPerUser as string) : 1,
-                    enableAssetBackups: enableAssetBackups ?? true,
-                    updatedBy: userId,
-                },
-                create: {
-                    id: "default",
-                    betaBannerEnabled,
-                    betaBannerText,
-                    tickerEnabled,
-                    tickerText,
-                    maxAssetSizeMB: maxAssetSizeMB ? parseInt(maxAssetSizeMB as string) : 1024,
-                    maxBackupsPerUser: maxBackupsPerUser ? parseInt(maxBackupsPerUser as string) : 1,
-                    enableAssetBackups: enableAssetBackups ?? true,
-                    updatedBy: userId,
-                },
+                where: { id: 'default' },
+                update: { ...body, updatedBy: user.id },
+                create: { id: 'default', ...body, updatedBy: user.id },
+                select: PUBLIC_FIELDS,
             });
-
-            return res.status(200).json({
-                success: true,
-                data: settings
-            });
-        } catch (error) {
-            console.error("Failed to update settings:", error);
-            return res.status(500).json({ error: "Failed to update settings" });
-        }
-    }
-
-    return res.status(405).json({ error: "Method not allowed" });
-}
+            await logger.info('ADMIN_SETTINGS_UPDATE', 'App settings updated', body, user);
+            return settings;
+        },
+    }),
+});

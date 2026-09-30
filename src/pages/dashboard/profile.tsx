@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useSession, useUser } from "@/context/SessionContext";
 import {
     CheckCircle,
     AlertCircle,
@@ -73,9 +73,8 @@ import { ActivityBarChart, RingChart } from "@/components/Charts/ActivityChart";
 
 export default function ProfilePage() {
     const { user, isLoaded } = useUser();
-    const { openUserProfile, signOut } = useClerk();
+    const { signOut } = useSession();
     const router = useRouter();
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const supportFileRef = useRef<HTMLInputElement>(null);
     const store = useStore();
 
@@ -288,8 +287,7 @@ export default function ProfilePage() {
             const res = await api.delete<any>('/api/user/delete');
             if (res.success) {
                 toast.success('Account deleted successfully');
-                await openUserProfile(); // Alternatively, signOut({ redirectUrl: '/' }) but openUserProfile forces clerk redirect which handles deep logout
-                await signOut({ redirectUrl: '/' });
+                await signOut({ redirectUrl: '/sign-in' });
             } else {
                 toast.error('Failed to delete account', { description: res.error });
             }
@@ -365,18 +363,14 @@ export default function ProfilePage() {
         }
     };
 
-    const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file || !user) return;
+    const handleSignOutOtherDevices = async () => {
         try {
-            await user.setProfileImage({ file });
-            toast.success('Photo Updated', {
-                description: 'Profile photo updated successfully!'
-            });
+            const res = await api.delete<{ revoked: number }>('/api/auth/sessions');
+            if (res.success) {
+                toast.success('Signed out of other devices', { description: `${res.data?.revoked ?? 0} session(s) ended` });
+            }
         } catch {
-            toast.error('Update Failed', {
-                description: 'Failed to update photo.'
-            });
+            toast.error('Failed to sign out other devices');
         }
     };
 
@@ -496,26 +490,11 @@ export default function ProfilePage() {
                                         {user?.firstName?.charAt(0) || 'U'}
                                     </AvatarFallback>
                                 </Avatar>
-                                <Button
-                                    size="icon"
-                                    variant="default"
-                                    className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full shadow-lg"
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <Edit className="h-4 w-4" />
-                                </Button>
-                                <input
-                                    type="file"
-                                    hidden
-                                    ref={fileInputRef}
-                                    onChange={handlePhotoUpload}
-                                    accept="image/*"
-                                />
                             </div>
                             <div className="space-y-1">
                                 <h3 className="text-lg font-bold">Profile Identity</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Manage your public avatar and display name across the platform.
+                                    Your avatar and name come from your Contentful account. You can set a display name below.
                                 </p>
                             </div>
                         </div>
@@ -578,15 +557,15 @@ export default function ProfilePage() {
                                     <h4 className="font-bold">Account Security</h4>
                                 </div>
                                 <p className="text-sm text-muted-foreground leading-relaxed">
-                                    Your authentication and session data are secured by **Clerk**. Manage your passwords and linked accounts in the global settings.
+                                    You sign in with your Contentful account. Your Contentful token is stored encrypted and never leaves the server. End sessions on other browsers and devices here.
                                 </p>
                             </div>
                             <Button
                                 variant="outline"
                                 className="w-full mt-4 h-11 border-primary/20 hover:bg-primary/5 group"
-                                onClick={() => openUserProfile()}
+                                onClick={handleSignOutOtherDevices}
                             >
-                                Open Account Settings
+                                Sign out other devices
                                 <Edit className="ml-2 h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-all" />
                             </Button>
                         </div>

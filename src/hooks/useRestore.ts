@@ -26,11 +26,6 @@ interface RestoreOptions {
     clearEnvironment?: boolean | string;
 }
 
-interface ValidationResponse {
-    success: boolean;
-    data: ValidationResult;
-}
-
 interface UseRestoreReturn {
     handleRestore: (backup: Backup | null, options?: RestoreOptions, fileContent?: unknown, targetEnvironment?: string) => Promise<void>;
 
@@ -195,7 +190,7 @@ export function useRestore(): UseRestoreReturn {
         try {
             dispatch({ type: "SET_LOADING", payload: { key: 'loadingMigration', value: true } });
 
-            const response = await api.post<ValidationResponse>('/api/validate-restore', {
+            const response = await api.post<ValidationResult>('/api/validate-restore', {
                 spaceId,
                 targetEnvironment: effectiveTarget,
                 backupId: backup?.id,
@@ -206,8 +201,7 @@ export function useRestore(): UseRestoreReturn {
             dispatch({ type: "SET_LOADING", payload: { key: 'loadingMigration', value: false } });
 
             if (response.success && response.data) {
-                const responseBody = response.data;
-                const validation = responseBody.data;
+                const validation = response.data;
 
                 if (validation && validation.status === 'mismatch') {
                     setValidationResult(validation);

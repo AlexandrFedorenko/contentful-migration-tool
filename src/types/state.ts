@@ -27,7 +27,6 @@ export interface Space {
 
 export interface UserProfile {
     id: string;
-    clerkId: string;
     email: string;
     firstName?: string | null;
     lastName?: string | null;

@@ -1,70 +1,61 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { z } from 'zod';
+import { createApiHandler, route } from '@/server/api';
+import { getActiveToken } from '@/server/contentful/credentials';
+import { environmentId, spaceId } from '@/server/validation';
+import { MigrationStepsSchema } from '@/server/visual-migration';
+import { ContentfulManagement } from '@/utils/contentful-management';
 
-import { generateMigrationCode } from '@/utils/code-generator';
+const Body = z.object({
+    spaceId,
+    targetEnv: environmentId,
+    contentType: z.string().optional(),
+    steps: z.unknown(),
+});
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+/**
+ * POST /api/visual-migrate-preview
+ * Dry run: validates the steps exactly like execution would and counts the entries
+ * that data transformations will touch.
+ */
+export default createApiHandler({
+    POST: route({
+        body: Body,
+        rateLimit: { limit: 30, windowSeconds: 60 },
+        handler: async (_req, _res, { user, body }) => {
+            const parsed = MigrationStepsSchema.safeParse(body.steps);
+            if (!parsed.success) {
+                return {
+                    valid: false,
+                    error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+                    warnings: [],
+                };
+            }
+            const steps = parsed.data;
+            const warnings: string[] = [];
+            if (steps.some((s) => s.operation === 'deleteContentType' || s.operation === 'deleteField')) {
+                warnings.push('This migration deletes content model elements. Data in them will be lost.');
+            }
 
-    const { spaceId, targetEnv, contentType, steps } = req.body;
+            const transformCts = new Set(steps.filter((s) => s.type === 'transformation').map((s) => String(s.params.contentType)));
+            let affectedEntries = 0;
+            if (transformCts.size > 0) {
+                const token = await getActiveToken(user.id);
+                const env = await (await ContentfulManagement.getClient(token).getSpace(body.spaceId)).getEnvironment(body.targetEnv);
+                for (const ct of transformCts) {
+                    try {
+                        affectedEntries += (await env.getEntries({ content_type: ct, limit: 0 })).total;
+                    } catch {
+                        warnings.push(`Content type "${ct}" was not found in ${body.targetEnv}.`);
+                    }
+                }
+            }
 
-    if (!spaceId || !targetEnv || !contentType || !steps || !Array.isArray(steps)) {
-        return res.status(400).json({
-            valid: false,
-            error: 'Missing required parameters or invalid steps'
-        });
-    }
-
-    try {
-        const migrationCode = generateMigrationCode(steps, '');
-        // Validate JavaScript syntax
-        try {
-            new Function(migrationCode);
-        } catch (syntaxError: unknown) {
-            const msg = syntaxError instanceof Error ? syntaxError.message : String(syntaxError);
-            return res.status(400).json({
-                valid: false,
-                error: `Syntax error: ${msg}`
-            });
-        }
-
-        // Simulate migration (without actually running it)
-        // In a real implementation, you would:
-        // 1. Parse the migration code
-        // 2. Fetch entries from Contentful
-        // 3. Count how many would be affected
-        // 4. Check for potential issues
-
-        const warnings: string[] = [];
-
-        // Basic validation
-        if (!migrationCode.includes('migration.')) {
-            warnings.push('Migration code should use the "migration" object');
-        }
-
-        if (migrationCode.includes('transformEntries') && !migrationCode.includes('contentType:')) {
-            warnings.push('transformEntries should specify a contentType');
-        }
-
-        // Simulate entry count (in real implementation, fetch from API)
-        const affectedEntries = Math.floor(Math.random() * 100) + 1;
-        const estimatedTime = `${Math.ceil(affectedEntries / 10)} seconds`;
-
-        res.json({
-            success: true,
-            data: {
+            return {
                 valid: true,
                 affectedEntries,
-                estimatedTime,
-                warnings
-            }
-        });
-    } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        res.status(500).json({
-            valid: false,
-            error: msg || 'Failed to preview migration'
-        });
-    }
-}
+                estimatedTime: `${Math.max(1, Math.ceil(affectedEntries / 5))} seconds`,
+                warnings,
+            };
+        },
+    }),
+});

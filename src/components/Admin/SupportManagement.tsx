@@ -29,7 +29,7 @@ interface SupportRequest {
     status: string;
     createdAt: string;
     user: {
-        clerkId: string;
+        id: string;
     };
 }
 
