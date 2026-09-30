@@ -14,7 +14,7 @@ jest.mock('next/router', () => ({
     })
 }));
 
-// ─── Clerk ────────────────────────────────────────────────────────────────────
+// ─── Session ────────────────────────────────────────────────────────────────────
 const mockUseUser = jest.fn();
 const stableUser = { 
     id: 'user_1',
@@ -23,8 +23,9 @@ const stableUser = {
     primaryEmailAddress: { emailAddress: 'test@example.com' } 
 };
 
-jest.mock('@clerk/nextjs', () => ({
-    useUser: () => mockUseUser()
+jest.mock('@/context/SessionContext', () => ({
+    useUser: () => mockUseUser(),
+    useSession: () => ({ signOut: jest.fn() }),
 }));
 
 // ─── useUserProfile ───────────────────────────────────────────────────────────

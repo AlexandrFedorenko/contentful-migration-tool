@@ -1,0 +1,27 @@
+# Caddy terminates TLS (automatic Let's Encrypt certificates) and proxies to the app.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Uploads for restore can be large; the app enforces its own limits.
+	request_body {
+		max_size 2GB
+	}
+
+	reverse_proxy web:3000 {
+		# Server-Sent Events: stream progress immediately
+		flush_interval -1
+		transport http {
+			read_timeout 6h
+			write_timeout 6h
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,118 +1,83 @@
 import { renderHook, act } from '@testing-library/react';
 import { useVisualBuilderTemplates } from '../useVisualBuilderTemplates';
+import { api } from '@/utils/api';
 
-// Setup global fetch mock
-global.fetch = jest.fn();
+jest.mock('@/utils/api', () => ({
+    ...jest.requireActual('@/utils/api'),
+    api: { get: jest.fn(), post: jest.fn(), delete: jest.fn() },
+}));
 
 describe('useVisualBuilderTemplates', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
+    const templates = [{ id: 't1', name: 'Template 1', content: [], category: 'custom', updatedAt: '' }];
 
-    it('fetches templates successfully', async () => {
-        const mockTemplates = [{ id: 't1', name: 'Template 1' }];
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => mockTemplates,
-        });
+    beforeEach(() => jest.clearAllMocks());
 
+    it('fetches templates', async () => {
+        (api.get as jest.Mock).mockResolvedValueOnce({ success: true, data: templates });
         const { result } = renderHook(() => useVisualBuilderTemplates());
-
-        // Initial fetch is triggered by useEffect?
-        // Wait, the hook implementation DOES NOT have a useEffect to auto-fetch.
-        // It exposes fetchTemplates function.
-        // Let's check implementation again...
-        // Ah, checked file: lines 13-83. No useEffect calling fetchTemplates.
-        // So we must call it manually.
 
         await act(async () => {
             await result.current.fetchTemplates();
         });
 
-        expect(result.current.templates).toEqual(mockTemplates);
+        expect(api.get).toHaveBeenCalledWith('/api/visual-builder/templates');
+        expect(result.current.templates).toEqual(templates);
         expect(result.current.loading).toBe(false);
         expect(result.current.error).toBeNull();
     });
 
-    it('handles fetch error', async () => {
-        (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Fetch failed'));
-
+    it('shows a readable error when fetching fails', async () => {
+        (api.get as jest.Mock).mockRejectedValueOnce(new Error('Fetch failed'));
         const { result } = renderHook(() => useVisualBuilderTemplates());
 
         await act(async () => {
             await result.current.fetchTemplates();
         });
 
-        expect(result.current.error).toBe('Fetch failed');
+        expect(result.current.error).toContain('Fetch failed');
         expect(result.current.loading).toBe(false);
     });
 
-    it('saves a template successfully and refreshes list', async () => {
+    it('saves a template and refreshes the list', async () => {
+        (api.post as jest.Mock).mockResolvedValueOnce({ success: true, data: templates[0] });
+        (api.get as jest.Mock).mockResolvedValueOnce({ success: true, data: templates });
         const { result } = renderHook(() => useVisualBuilderTemplates());
 
-        // 1. Mock Save Response
-        (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true });
-        // 2. Mock Refresh Response
-        const mockTemplates = [{ id: 'new', name: 'New Template' }];
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => mockTemplates,
-        });
-
+        let saved = false;
         await act(async () => {
-            const success = await result.current.saveTemplate('New', 'Desc', []);
-            expect(success).toBe(true);
+            saved = await result.current.saveTemplate('New', 'Desc', []);
         });
 
-        // Verify Save Call
-        expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/visual-builder/templates', expect.objectContaining({
-            method: 'POST',
-            body: expect.stringContaining('"name":"New"'),
-        }));
-
-        // Verify Refresh Call
-        expect(global.fetch).toHaveBeenNthCalledWith(2, '/api/visual-builder/templates');
-        expect(result.current.templates).toEqual(mockTemplates);
+        expect(saved).toBe(true);
+        expect(api.post).toHaveBeenCalledWith('/api/visual-builder/templates', { name: 'New', description: 'Desc', content: [], category: 'custom' });
+        expect(result.current.templates).toEqual(templates);
     });
 
-    it('handles save error', async () => {
+    it('reports save errors', async () => {
+        (api.post as jest.Mock).mockResolvedValueOnce({ success: false, error: 'Template limit reached' });
         const { result } = renderHook(() => useVisualBuilderTemplates());
 
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: false,
-            statusText: 'Bad Request'
-        });
-
+        let saved = true;
         await act(async () => {
-            const success = await result.current.saveTemplate('New', 'Desc', []);
-            expect(success).toBe(false);
+            saved = await result.current.saveTemplate('New', 'Desc', []);
         });
 
-        expect(result.current.error).toBe('Failed to save template');
+        expect(saved).toBe(false);
+        expect(result.current.error).toContain('Template limit reached');
     });
 
-    it('deletes a template successfully and refreshes list', async () => {
+    it('deletes a template and refreshes the list', async () => {
+        (api.delete as jest.Mock).mockResolvedValueOnce({ success: true, data: { deleted: true } });
+        (api.get as jest.Mock).mockResolvedValueOnce({ success: true, data: [] });
         const { result } = renderHook(() => useVisualBuilderTemplates());
 
-        // 1. Mock Delete Response
-        (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true });
-        // 2. Mock Refresh Response
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => [],
-        });
-
+        let deleted = false;
         await act(async () => {
-            const success = await result.current.deleteTemplate('t1');
-            expect(success).toBe(true);
+            deleted = await result.current.deleteTemplate('t1');
         });
 
-        // Verify Delete Call
-        expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/visual-builder/templates/t1', expect.objectContaining({
-            method: 'DELETE',
-        }));
-
-        // Verify Refresh Call
-        expect(global.fetch).toHaveBeenNthCalledWith(2, '/api/visual-builder/templates');
+        expect(deleted).toBe(true);
+        expect(api.delete).toHaveBeenCalledWith('/api/visual-builder/templates/t1');
+        expect(result.current.templates).toEqual([]);
     });
 });

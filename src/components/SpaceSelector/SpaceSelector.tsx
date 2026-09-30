@@ -67,12 +67,12 @@ const SpaceSelector = React.memo(({ className }: SpaceSelectorProps) => {
 
   return (
     <div className={cn("space-y-3", className)}>
-      <span className="text-sm font-semibold text-muted-foreground block">Select Space</span>
+      <span id="space-selector-label" className="text-sm font-semibold text-muted-foreground block">Select Space</span>
       <Select
         value={state.spaceId || ''}
         onValueChange={handleValueChange}
       >
-        <SelectTrigger className="w-full bg-background/50">
+        <SelectTrigger aria-labelledby="space-selector-label" className="w-full bg-background/50">
           <SelectValue placeholder="Select a space" />
         </SelectTrigger>
         <SelectContent>

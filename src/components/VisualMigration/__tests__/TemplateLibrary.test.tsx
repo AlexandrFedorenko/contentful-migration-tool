@@ -1,145 +1,62 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { TemplateLibrary } from '../TemplateLibrary';
-import '@testing-library/jest-dom';
+import { useVisualBuilderTemplates } from '@/hooks/useVisualBuilderTemplates';
+import { MIGRATION_TEMPLATES } from '@/templates/migration-templates';
 
-// Mock dependencies
-const mockDeleteTemplate = jest.fn();
-const mockFetchTemplates = jest.fn();
-
-jest.mock('@/hooks/useVisualBuilderTemplates', () => ({
-    useVisualBuilderTemplates: () => ({
-        templates: [
-            { id: 'custom-1', name: 'My Custom Template', description: 'Custom Desc', content: [] }
-        ],
-        fetchTemplates: mockFetchTemplates,
-        deleteTemplate: mockDeleteTemplate,
-        loading: false
-    })
-}));
-
-jest.mock('@/templates/migration-templates', () => ({
-    MIGRATION_TEMPLATES: [
-        {
-            id: 'builtin-1',
-            name: 'Built-in Template',
-            description: 'Built-in Desc',
-            category: 'field',
-            icon: '📦',
-            steps: []
-        },
-        {
-            id: 'builtin-2',
-            name: 'Another Template',
-            description: 'Another Desc',
-            category: 'cleanup',
-            icon: '🧹',
-            steps: []
-        }
-    ]
-}));
+jest.mock('@/hooks/useVisualBuilderTemplates', () => ({ useVisualBuilderTemplates: jest.fn() }));
 
 describe('TemplateLibrary', () => {
-    const mockOnUseTemplate = jest.fn();
-    const mockOnPreviewCode = jest.fn();
+    const onUseTemplate = jest.fn();
+    const onPreviewCode = jest.fn();
+    const fetchTemplates = jest.fn();
+    const deleteTemplate = jest.fn();
+    const builtIn = MIGRATION_TEMPLATES[0];
 
     beforeEach(() => {
         jest.clearAllMocks();
+        (useVisualBuilderTemplates as jest.Mock).mockReturnValue({
+            templates: [{ id: 'custom-1', name: 'My Custom Blueprint', description: 'Saved by me', content: [], category: 'custom', updatedAt: '' }],
+            fetchTemplates,
+            deleteTemplate,
+            loading: false,
+        });
     });
 
-    it('renders built-in and custom templates', () => {
-        render(
-            <TemplateLibrary
-                onUseTemplate={mockOnUseTemplate}
-                onPreviewCode={mockOnPreviewCode}
-            />
-        );
+    const cardOf = (name: string) => screen.getByText(name).closest('.group') as HTMLElement;
 
-        // Check for built-in
-        expect(screen.getByText('Built-in Template')).toBeInTheDocument();
-        // Check for custom
-        expect(screen.getByText('My Custom Template')).toBeInTheDocument();
-        // Check filtering/grouping headers
-        expect(screen.getByText(/Field Operations/)).toBeInTheDocument();
-        expect(screen.getByText(/My Custom Templates/)).toBeInTheDocument();
+    it('loads and shows built-in and custom templates', () => {
+        render(<TemplateLibrary onUseTemplate={onUseTemplate} onPreviewCode={onPreviewCode} />);
+        expect(fetchTemplates).toHaveBeenCalled();
+        expect(screen.getByText(builtIn.name)).toBeInTheDocument();
+        expect(screen.getByText('My Custom Blueprint')).toBeInTheDocument();
+        expect(screen.getByText('My Custom')).toBeInTheDocument();
     });
 
-    it('filters templates by search query', () => {
-        render(
-            <TemplateLibrary
-                onUseTemplate={mockOnUseTemplate}
-                onPreviewCode={mockOnPreviewCode}
-            />
-        );
+    it('filters by search text', () => {
+        render(<TemplateLibrary onUseTemplate={onUseTemplate} onPreviewCode={onPreviewCode} />);
+        fireEvent.change(screen.getByPlaceholderText('Filter blueprints...'), { target: { value: 'my custom' } });
+        expect(screen.getByText('My Custom Blueprint')).toBeInTheDocument();
+        expect(screen.queryByText(builtIn.name)).not.toBeInTheDocument();
 
-        const searchInput = screen.getByPlaceholderText('Search templates...');
-        fireEvent.change(searchInput, { target: { value: 'Custom' } });
-
-        expect(screen.getByText('My Custom Template')).toBeInTheDocument();
-        expect(screen.queryByText('Built-in Template')).not.toBeInTheDocument();
+        fireEvent.change(screen.getByPlaceholderText('Filter blueprints...'), { target: { value: 'nothing-matches-this' } });
+        expect(screen.getByText('No matching blueprints')).toBeInTheDocument();
     });
 
-    it('filters templates by category', () => {
-        render(
-            <TemplateLibrary
-                onUseTemplate={mockOnUseTemplate}
-                onPreviewCode={mockOnPreviewCode}
-            />
-        );
-
-        // Open Category Select
-        // MUI Select renders as a combobox. We can find it by its current text value or role + text
-        // "All Templates" is the default value visible in the combobox
-        const categorySelectTrigger = screen.getByText('All Templates');
-        fireEvent.mouseDown(categorySelectTrigger);
-
-        // Click option
-        const option = screen.getByRole('option', { name: 'Field Operations' });
-        fireEvent.click(option);
-
-        expect(screen.getByText('Built-in Template')).toBeInTheDocument();
-        expect(screen.queryByText('My Custom Template')).not.toBeInTheDocument();
+    it('applies and previews a template', () => {
+        render(<TemplateLibrary onUseTemplate={onUseTemplate} onPreviewCode={onPreviewCode} />);
+        const card = cardOf(builtIn.name);
+        fireEvent.click(within(card).getByRole('button', { name: /apply/i }));
+        expect(onUseTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: builtIn.id }));
+        fireEvent.click(within(card).getByRole('button', { name: /code/i }));
+        expect(onPreviewCode).toHaveBeenCalledWith(expect.objectContaining({ id: builtIn.id }));
     });
 
-    it('calls onUseTemplate when clicked', () => {
-        render(
-            <TemplateLibrary
-                onUseTemplate={mockOnUseTemplate}
-                onPreviewCode={mockOnPreviewCode}
-            />
-        );
-
-        // Find the "Use Template" button specifically for the built-in template
-        // We can find the card first
-        const card = screen.getByText('Built-in Template').closest('.MuiCard-root');
-        const useBtn = within(card as HTMLElement).getByText('Use Template');
-
-        fireEvent.click(useBtn);
-
-        expect(mockOnUseTemplate).toHaveBeenCalledWith(expect.objectContaining({
-            id: 'builtin-1',
-            name: 'Built-in Template'
-        }));
-    });
-
-    it('calls deleteTemplate with confirmation for custom templates', async () => {
-        // Mock confirm
-        window.confirm = jest.fn(() => true);
-
-        render(
-            <TemplateLibrary
-                onUseTemplate={mockOnUseTemplate}
-                onPreviewCode={mockOnPreviewCode}
-            />
-        );
-
-        // Find delete button on custom template
-        const customCard = screen.getByText('My Custom Template').closest('.MuiCard-root');
-        const deleteBtn = within(customCard as HTMLElement).getByTitle('Delete Template');
-
-        fireEvent.click(deleteBtn);
-
-        expect(window.confirm).toHaveBeenCalled();
-        expect(mockDeleteTemplate).toHaveBeenCalledWith('custom-1');
+    it('deletes only custom templates, after confirmation', () => {
+        jest.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<TemplateLibrary onUseTemplate={onUseTemplate} onPreviewCode={onPreviewCode} />);
+        expect(screen.queryByRole('button', { name: `Delete template ${builtIn.name}` })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Delete template My Custom Blueprint' }));
+        expect(deleteTemplate).toHaveBeenCalledWith('custom-1');
     });
 });

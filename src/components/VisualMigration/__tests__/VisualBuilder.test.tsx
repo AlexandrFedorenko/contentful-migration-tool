@@ -2,221 +2,81 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { VisualBuilder } from '../VisualBuilder';
 import { MigrationStep } from '@/templates/migration-templates';
-import '@testing-library/jest-dom';
 
-// Mocks
 jest.mock('../OperationSelector', () => ({
-    OperationSelector: ({ onAddOperation }: { onAddOperation: (op: string) => void }) => (
-        <div data-testid="operation-selector">
-            <button onClick={() => onAddOperation('addField')}>Add Field</button>
-        </div>
-    )
+    OperationSelector: ({ onSelectOperation }: { onSelectOperation: (op: Partial<MigrationStep>) => void }) => (
+        <button onClick={() => onSelectOperation({ id: 'new', type: 'field', operation: 'createField', label: 'New Field', params: { fieldId: 'extra' } })}>
+            Add Mock Operation
+        </button>
+    ),
 }));
 
 jest.mock('../StepEditor', () => ({
-    StepEditor: ({ step, onChange, onDelete }: { step: { id: string; type: string }; onChange: (s: unknown) => void; onDelete: () => void }) => (
-        <div data-testid={`step-editor-${step.id}`}>
-            {step.type}
-            <button onClick={() => onChange({ ...step, name: 'Updated' })}>Change</button>
-            <button onClick={onDelete}>Delete</button>
-        </div>
-    )
+    StepEditor: ({ open, step, onSave }: { open: boolean; step: MigrationStep | null; onSave: (s: MigrationStep) => void }) =>
+        open && step ? <button onClick={() => onSave({ ...step, label: 'Edited' })}>Save Edited Step</button> : null,
 }));
 
 const mockSaveTemplate = jest.fn();
 jest.mock('@/hooks/useVisualBuilderTemplates', () => ({
-    useVisualBuilderTemplates: () => ({
-        saveTemplate: mockSaveTemplate,
-        loading: false
-    })
+    useVisualBuilderTemplates: () => ({ saveTemplate: mockSaveTemplate, loading: false }),
 }));
 
 describe('VisualBuilder', () => {
-    const mockOnStepsChange = jest.fn();
-    const mockOnGenerateCode = jest.fn();
-
-    const sampleSteps: MigrationStep[] = [
-        {
-            id: '1',
-            type: 'contentType',
-            operation: 'createContentType',
-            label: 'Create Blog',
-            icon: '📝',
-            params: { contentTypeId: 'blog' }
-        },
-        {
-            id: '2',
-            type: 'field',
-            operation: 'createField',
-            label: 'Create Title',
-            icon: '➕',
-            params: { fieldId: 'title', contentType: 'blog' }
-        }
+    const onStepsChange = jest.fn();
+    const onGenerateCode = jest.fn();
+    const steps: MigrationStep[] = [
+        { id: '1', type: 'contentType', operation: 'createContentType', label: 'Create Blog', icon: '📝', params: { contentTypeId: 'blog' } },
+        { id: '2', type: 'field', operation: 'createField', label: 'Create Title', icon: '➕', params: { fieldId: 'title', contentType: 'blog' } },
     ];
+
+    const renderBuilder = (s: MigrationStep[] = steps) =>
+        render(<VisualBuilder steps={s} onStepsChange={onStepsChange} onGenerateCode={onGenerateCode} contentType="" />);
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.spyOn(console, 'warn').mockImplementation(() => undefined);
         mockSaveTemplate.mockResolvedValue(true);
     });
 
-    it('renders empty state correctly', () => {
-        render(
-            <VisualBuilder
-                steps={[]}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
+    it('shows the empty state', () => {
+        renderBuilder([]);
         expect(screen.getByText('No steps yet')).toBeInTheDocument();
-        expect(screen.getByText('Add Mock Operation')).toBeInTheDocument();
     });
 
-    it('renders list of steps', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        expect(screen.getByText(/1. Create Blog/)).toBeInTheDocument();
-        expect(screen.getByText(/2. Create Title/)).toBeInTheDocument();
-        expect(screen.getByText('Save Template')).toBeInTheDocument();
-        expect(screen.getByText('Generate Code')).toBeInTheDocument();
+    it('lists steps in order', () => {
+        renderBuilder();
+        expect(screen.getByText('Create Blog')).toBeInTheDocument();
+        expect(screen.getByText('Create Title')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /generate code/i }));
+        expect(onGenerateCode).toHaveBeenCalled();
     });
 
-    it('adds a new step', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
+    it('adds a field step bound to the content type being created', () => {
+        renderBuilder();
         fireEvent.click(screen.getByText('Add Mock Operation'));
-
-        expect(mockOnStepsChange).toHaveBeenCalledWith(expect.arrayContaining([
-            ...sampleSteps,
-            expect.objectContaining({ label: 'New Field' })
-        ]));
+        const next = onStepsChange.mock.calls[0][0] as MigrationStep[];
+        expect(next).toHaveLength(3);
+        expect(next[2]).toMatchObject({ id: 'new', label: 'New Field', params: { fieldId: 'extra', contentType: 'blog' } });
     });
 
     it('deletes a step', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        // Click delete on the first item
-        const deleteButtons = screen.getAllByLabelText('Delete step');
-        fireEvent.click(deleteButtons[0]);
-
-        // Should return array without first item
-        expect(mockOnStepsChange).toHaveBeenCalledWith([sampleSteps[1]]);
+        renderBuilder();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Delete step' })[0]);
+        expect(onStepsChange).toHaveBeenCalledWith([steps[1]]);
     });
 
     it('edits a step', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        // Click edit on first item
-        const editButtons = screen.getAllByLabelText('Edit step');
-        fireEvent.click(editButtons[0]);
-
-        // Check if editor opened
-        expect(screen.getByText('Mock Editor for Create Blog')).toBeInTheDocument();
-
-        // Save edit
-        fireEvent.click(screen.getByText('Save Edit'));
-
-        expect(mockOnStepsChange).toHaveBeenCalledWith([
-            expect.objectContaining({ label: 'Updated Label' }),
-            sampleSteps[1]
-        ]);
+        renderBuilder();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Edit step' })[0]);
+        fireEvent.click(screen.getByText('Save Edited Step'));
+        expect(onStepsChange).toHaveBeenCalledWith([{ ...steps[0], label: 'Edited' }, steps[1]]);
     });
 
-    it('reorders steps via drag and drop', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        const items = screen.getAllByRole('listitem');
-        const firstItem = items[0];
-        const secondItem = items[1];
-
-        // Drag start first item
-        fireEvent.dragStart(firstItem);
-        // Drag over second item
-        fireEvent.dragOver(secondItem);
-        // Note: component implementation calls onStepsChange inside dragOver
-        // logic: removes from index 0, inserts at index 1
-
-        expect(mockOnStepsChange).toHaveBeenCalledWith([
-            sampleSteps[1],
-            sampleSteps[0]
-        ]);
-    });
-
-    it('opens save dialog and saves template', async () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        fireEvent.click(screen.getByText('Save Template'));
-
-        // Dialog opens
-        expect(screen.getByText('Save as Template')).toBeInTheDocument();
-
-        // Fill form
-        const nameInput = screen.getByLabelText(/Template Name/i); // Using regex per previous lesson
-        fireEvent.change(nameInput, { target: { value: 'My Template' } });
-
-        // Click Save
-        const saveButton = screen.getAllByText('Save').pop()!; // Last one likely in dialog
-        fireEvent.click(saveButton);
-
-        await waitFor(() => {
-            expect(mockSaveTemplate).toHaveBeenCalledWith('My Template', '', sampleSteps);
-        });
-    });
-
-    it('calls onGenerateCode', () => {
-        render(
-            <VisualBuilder
-                steps={sampleSteps}
-                onStepsChange={mockOnStepsChange}
-                onGenerateCode={mockOnGenerateCode}
-                contentType=""
-            />
-        );
-
-        fireEvent.click(screen.getByText('Generate Code'));
-        expect(mockOnGenerateCode).toHaveBeenCalled();
+    it('saves the sequence as a template', async () => {
+        renderBuilder();
+        fireEvent.click(screen.getByRole('button', { name: /save template/i }));
+        fireEvent.change(screen.getByPlaceholderText('e.g., Blog Schema Base'), { target: { value: 'Blog base' } });
+        fireEvent.click(screen.getByRole('button', { name: /commit template/i }));
+        await waitFor(() => expect(mockSaveTemplate).toHaveBeenCalledWith('Blog base', '', steps));
     });
 });

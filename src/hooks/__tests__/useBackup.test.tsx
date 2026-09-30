@@ -136,7 +136,7 @@ describe('useBackup Hook', () => {
     it('should trigger asset download when zip is created', async () => {
         (api.post as jest.Mock).mockResolvedValue({
             success: true,
-            data: { backupFile: 'backup.json', hasZip: true }
+            data: { backupFile: 'backup.json', backupId: 'b-1', hasZip: true }
         });
 
         // Mock get backups
@@ -149,7 +149,7 @@ describe('useBackup Hook', () => {
         });
 
         expect(window.open).toHaveBeenCalledWith(
-            expect.stringContaining('/api/download-transient-zip'),
+            '/api/download-backup?backupId=b-1&format=zip',
             '_blank'
         );
 

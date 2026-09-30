@@ -5,6 +5,8 @@ import BackupList from '../BackupList';
 import { useGlobalContext } from '@/context/GlobalContext';
 
 // Mock dependencies
+jest.mock('next/router', () => ({ useRouter: () => ({ push: jest.fn(), query: {}, pathname: '/backup' }) }));
+
 jest.mock('@/context/GlobalContext', () => ({
     useGlobalContext: jest.fn(),
 }));
@@ -57,7 +59,7 @@ describe('BackupList Component', () => {
 
     it('renders "No backups available" when backups list is empty', () => {
         render(<BackupList />);
-        expect(screen.getByText('No backups available')).toBeInTheDocument();
+        expect(screen.getByText('No archives identified')).toBeInTheDocument();
     });
 
     it('renders "No backups available" when backups is undefined (Regression Test)', () => {
@@ -77,7 +79,7 @@ describe('BackupList Component', () => {
         render(<BackupList />);
 
         // Assert: Should not crash and show empty state
-        expect(screen.getByText('No backups available')).toBeInTheDocument();
+        expect(screen.getByText('No archives identified')).toBeInTheDocument();
     });
 
     it('renders a list of backups correctly and sorted by time (newest first)', () => {
@@ -103,11 +105,9 @@ describe('BackupList Component', () => {
         expect(screen.getByText('backup-older.json')).toBeInTheDocument();
         expect(screen.getByText('backup-newer.json')).toBeInTheDocument();
 
-        // Should be sorted by time (newest first, based on implementation)
-        const listItems = screen.getAllByRole('listitem');
-        // The implementation sorts b.time - a.time
-        expect(listItems[0]).toHaveTextContent('backup-newer.json');
-        expect(listItems[1]).toHaveTextContent('backup-older.json');
+        // Newest first
+        const names = screen.getAllByText(/^backup-(newer|older)\.json$/).map((el) => el.textContent);
+        expect(names).toEqual(['backup-newer.json', 'backup-older.json']);
     });
 
     it('shows loading spinner when loadingBackups is true', () => {
@@ -123,8 +123,6 @@ describe('BackupList Component', () => {
         });
 
         render(<BackupList />);
-        // Assuming CircularProgress has role="progressbar"
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
-        expect(screen.getByText('Loading backups...')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Syncing backup vault...');
     });
 });

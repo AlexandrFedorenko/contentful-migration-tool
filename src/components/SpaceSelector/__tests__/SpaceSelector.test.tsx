@@ -49,8 +49,8 @@ describe('SpaceSelector Component', () => {
 
     it('renders spaces and allows selection', () => {
         const mockSpaces = [
-            { sys: { id: 'space-1' }, name: 'Space One' },
-            { sys: { id: 'space-2' }, name: 'Space Two' },
+            { id: 'space-1', name: 'Space One' },
+            { id: 'space-2', name: 'Space Two' },
         ];
 
         (useSpaces as jest.Mock).mockReturnValue({
@@ -68,8 +68,8 @@ describe('SpaceSelector Component', () => {
 
         render(<SpaceSelector />);
 
-        // Check if label exists
-        expect(screen.getByLabelText('Select Space')).toBeInTheDocument();
+        const trigger = screen.getByRole('combobox', { name: 'Select Space' });
+        expect(trigger).toHaveTextContent('Space One');
     });
 
     it('renders "No spaces found" when spaces list is empty', () => {

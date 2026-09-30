@@ -191,7 +191,7 @@ export default function BackupList({ selectedBackupForRestore, onBackupSelect }:
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [state.spaceId]);
+  }, []);
 
   // Download Warning Dialog State
   const [downloadWarningOpen, setDownloadWarningOpen] = useState(false);
@@ -242,8 +242,8 @@ export default function BackupList({ selectedBackupForRestore, onBackupSelect }:
 
   if (state.loading.loadingBackups) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div role="status" aria-live="polite" className="flex flex-col items-center justify-center p-12 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
         <p className="text-base text-muted-foreground animate-pulse">Syncing backup vault...</p>
       </div>
     );

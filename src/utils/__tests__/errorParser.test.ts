@@ -38,7 +38,7 @@ describe('errorParser', () => {
     it('returns generic error for unknown message', () => {
         const msg = "Something went wrong";
         const result = parseError(msg);
-        expect(result?.title).toBe('Restore Error');
+        expect(result?.title).toBe('Operation Error');
     });
 
     it('parses "cannot be deleted because it has entries"', () => {

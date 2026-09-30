@@ -1,77 +1,67 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AddStepDialog } from '../AddStepDialog';
-import '@testing-library/jest-dom';
 
 describe('AddStepDialog', () => {
-    const mockOnAdd = jest.fn();
-    const mockOnClose = jest.fn();
-    const defaultProps = {
-        open: true,
-        onClose: mockOnClose,
-        onAdd: mockOnAdd,
-        contentType: 'testType',
-    };
+    const onAdd = jest.fn();
+    const onClose = jest.fn();
+    const props = { open: true, onClose, onAdd, contentType: 'article' };
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     });
 
-    it('does not render when open is false', () => {
-        render(<AddStepDialog {...defaultProps} open={false} />);
+    const inject = () => fireEvent.click(screen.getByRole('button', { name: /inject step/i }));
+    const openTab = (name: RegExp) => {
+        const tab = screen.getByRole('tab', { name });
+        fireEvent.mouseDown(tab);
+        fireEvent.click(tab);
+    };
+
+    it('renders nothing when closed', () => {
+        render(<AddStepDialog {...props} open={false} />);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('renders correctly when open', () => {
-        render(<AddStepDialog {...defaultProps} />);
-        expect(screen.getByRole('dialog')).toBeVisible();
-        expect(screen.getByText('Add Migration Step')).toBeInTheDocument();
+    it('requires a field id before adding', () => {
+        render(<AddStepDialog {...props} />);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /inject step/i })).toBeDisabled();
     });
 
-    it('adds a Create Field step', () => {
-        render(<AddStepDialog {...defaultProps} />);
-
-
-        const idInput = screen.getByLabelText('Field ID');
-        fireEvent.change(idInput, { target: { value: 'newField' } });
-
-
-        fireEvent.click(screen.getByText('Add Step'));
-
-        expect(mockOnAdd).toHaveBeenCalledWith(expect.objectContaining({
+    it('adds a Create Field step for the current content type', () => {
+        render(<AddStepDialog {...props} />);
+        fireEvent.change(screen.getByLabelText('Field ID'), { target: { value: 'slug' } });
+        inject();
+        expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'field',
             operation: 'createField',
-            params: expect.objectContaining({
-                fieldId: 'newField',
-                fieldType: 'Symbol',
-            }),
+            params: expect.objectContaining({ contentType: 'article', fieldId: 'slug', fieldType: 'Symbol' }),
         }));
-        expect(mockOnClose).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
     });
 
     it('adds a Delete Field step', () => {
-        render(<AddStepDialog {...defaultProps} />);
-
-        // Switch Tab
-        fireEvent.click(screen.getByText('Delete Field'));
-
-        // Fill Field ID
-        // The label is specifically "Field ID to Delete"
-        const input = screen.getByLabelText('Field ID to Delete');
-        fireEvent.change(input, { target: { value: 'delField' } });
-
-        fireEvent.click(screen.getByText('Add Step'));
-
-        expect(mockOnAdd).toHaveBeenCalledWith(expect.objectContaining({
+        render(<AddStepDialog {...props} />);
+        openTab(/delete field/i);
+        fireEvent.change(screen.getByLabelText('Field ID to Delete'), { target: { value: 'legacy' } });
+        inject();
+        expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
             operation: 'deleteField',
-            params: expect.objectContaining({
-                fieldId: 'delField',
-            }),
+            params: { contentType: 'article', fieldId: 'legacy' },
         }));
     });
 
     it('adds a Rename Field step', () => {
-        render(<AddStepDialog {...defaultProps} />);
-
-        fireEvent.click(screen.getByText('Rename Field'));
+        render(<AddStepDialog {...props} />);
+        openTab(/rename field/i);
+        fireEvent.change(screen.getByLabelText('Current Field ID'), { target: { value: 'old' } });
+        fireEvent.change(screen.getByLabelText('New Field ID'), { target: { value: 'fresh' } });
+        inject();
+        expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+            operation: 'renameField',
+            params: { contentType: 'article', oldFieldId: 'old', newFieldId: 'fresh' },
+        }));
     });
 });

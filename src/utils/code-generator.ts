@@ -45,10 +45,9 @@ function key(name: unknown): string {
 }
 
 /** Property access: obj.name when safe, obj['name'] otherwise. */
-function prop(obj: string, name: unknown, optional = false): string {
+function prop(obj: string, name: unknown): string {
     const s = String(name ?? '');
-    if (IDENTIFIER.test(s)) return `${obj}${optional ? '?.' : '.'}${s}`;
-    return `${obj}${optional ? '?.' : ''}[${q(s)}]`;
+    return IDENTIFIER.test(s) ? `${obj}.${s}` : `${obj}[${q(s)}]`;
 }
 
 /** Text safe inside a // comment (no line breaks). */
@@ -283,7 +282,7 @@ ${sourceFields.map((f) => `      ${key(f)}: ${prop('inputFields', f)}[locale]`).
 function generateTransformLogic(params: TransformParams): string {
     const { transform, sourceField, targetField, staticValue } = params;
     const t = key(targetField);
-    const src = prop('fromFields', sourceField, true);
+    const src = prop('fromFields', sourceField);
 
     switch (transform) {
         case 'replace':

@@ -22,8 +22,8 @@ import {
     AlertCircle,
     CheckCircle2
 } from "lucide-react";
-import { saveTemplate } from '@/templates/template-storage';
-import { MigrationTemplate } from '@/templates/migration-templates';
+import { toast } from 'sonner';
+import { useVisualBuilderTemplates } from '@/hooks/useVisualBuilderTemplates';
 import { MigrationStep } from '@/templates/migration-templates';
 
 interface ActionButtonsProps {
@@ -61,23 +61,21 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     const [previewData, setPreviewData] = useState<PreviewData | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
 
-    const handleSaveTemplate = () => {
+    const { saveTemplate, loading: savingTemplate } = useVisualBuilderTemplates();
+
+    const handleSaveTemplate = async () => {
         if (!templateName.trim()) {
             return;
         }
-
-        const template: Omit<MigrationTemplate, 'id'> = {
-            name: templateName,
-            icon: '📝',
-            description: templateDescription || 'Created from Visual Builder',
-            category: 'custom',
-            steps: [] 
-        };
-
-        saveTemplate(template);
-        setSaveDialogOpen(false);
-        setTemplateName('');
-        setTemplateDescription('');
+        const saved = await saveTemplate(templateName.trim(), templateDescription || 'Created from Visual Builder', steps);
+        if (saved) {
+            toast.success('Template saved');
+            setSaveDialogOpen(false);
+            setTemplateName('');
+            setTemplateDescription('');
+        } else {
+            toast.error('Could not save the template');
+        }
     };
 
     const handlePreview = async () => {
@@ -191,7 +189,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
                         </Button>
                         <Button
                             onClick={handleSaveTemplate}
-                            disabled={!templateName.trim()}
+                            disabled={!templateName.trim() || savingTemplate || steps.length === 0}
                             className="bg-primary hover:bg-primary/90 text-white font-black px-8 uppercase tracking-widest text-[10px]"
                         >
                             Save Template

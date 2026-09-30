@@ -213,7 +213,7 @@ export function useRestore(): UseRestoreReturn {
             } else {
                 await performRestore(backup, undefined, options, fileContent, effectiveTarget);
             }
-        } catch (error) {
+        } catch {
             dispatch({ type: "SET_LOADING", payload: { key: 'loadingMigration', value: false } });
             await performRestore(backup, undefined, options, fileContent, effectiveTarget);
         }

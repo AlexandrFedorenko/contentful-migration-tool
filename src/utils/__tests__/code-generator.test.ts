@@ -51,8 +51,8 @@ describe('generateMigrationCode', () => {
 
         const code = generateMigrationCode([step], '');
 
-        expect(code).toContain("const ct = migration.editContentType('blogPost');");
-        expect(code).toContain("ct.createField('title')");
+        expect(code).toContain("const ct_blogPost = migration.editContentType('blogPost');");
+        expect(code).toContain("ct_blogPost.createField('title')");
         expect(code).toContain(".type('Symbol')");
         expect(code).toContain(".required(true)");
     });
@@ -130,7 +130,7 @@ describe('generateMigrationCode', () => {
 
         const code = generateMigrationCode([step], '');
 
-        expect(code).toContain("const ct = migration.editContentType('article');");
-        expect(code).toContain("ct.changeFieldControl('status', 'builtin', 'dropdown');");
+        expect(code).toContain("const ct_article = migration.editContentType('article');");
+        expect(code).toContain("ct_article.changeFieldControl('status', 'builtin', 'dropdown');");
     });
 });

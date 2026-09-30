@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -46,6 +46,7 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
     onAdd,
     contentType
 }) => {
+    const idPrefix = useId();
     const [stepType, setStepType] = useState<string>('createField');
     const [fieldId, setFieldId] = useState('');
     const [fieldType, setFieldType] = useState('Symbol');
@@ -63,6 +64,7 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                     label: `Create field "${fieldId}"`,
                     icon: '➕',
                     params: {
+                        contentType,
                         fieldId,
                         fieldType,
                         required: false
@@ -76,7 +78,7 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                     operation: 'deleteField',
                     label: `Delete field "${fieldId}"`,
                     icon: '🗑️',
-                    params: { fieldId }
+                    params: { contentType, fieldId }
                 };
                 break;
             case 'renameField':
@@ -86,7 +88,7 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                     operation: 'renameField',
                     label: `Rename "${fieldId}" → "${newFieldId}"`,
                     icon: '✏️',
-                    params: { oldFieldId: fieldId, newFieldId }
+                    params: { contentType, oldFieldId: fieldId, newFieldId }
                 };
                 break;
             case 'transformEntries':
@@ -157,8 +159,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                     <div className="p-6 py-8 min-h-[220px]">
                         <TabsContent value="createField" className="mt-0 space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field ID</Label>
+                                <Label htmlFor={`${idPrefix}-field-id`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field ID</Label>
                                 <Input
+                                    id={`${idPrefix}-field-id`}
                                     value={fieldId}
                                     onChange={(e) => setFieldId(e.target.value)}
                                     placeholder="e.g., slug, author, publishDate"
@@ -166,9 +169,10 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field Type</Label>
+                                <Label htmlFor={`${idPrefix}-field-type`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field Type</Label>
                                 <Select value={fieldType} onValueChange={setFieldType}>
-                                    <SelectTrigger className="bg-muted/20 border-border/50 h-11">
+                                    <SelectTrigger
+                                    id={`${idPrefix}-field-type`} className="bg-muted/20 border-border/50 h-11">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="bg-card border-border/50">
@@ -188,8 +192,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
 
                         <TabsContent value="deleteField" className="mt-0 space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field ID to Delete</Label>
+                                <Label htmlFor={`${idPrefix}-delete-field-id`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Field ID to Delete</Label>
                                 <Input
+                                    id={`${idPrefix}-delete-field-id`}
                                     value={fieldId}
                                     onChange={(e) => setFieldId(e.target.value)}
                                     placeholder="e.g., oldField, deprecatedField"
@@ -204,8 +209,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
 
                         <TabsContent value="renameField" className="mt-0 space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Current Field ID</Label>
+                                <Label htmlFor={`${idPrefix}-current-field-id`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Current Field ID</Label>
                                 <Input
+                                    id={`${idPrefix}-current-field-id`}
                                     value={fieldId}
                                     onChange={(e) => setFieldId(e.target.value)}
                                     placeholder="e.g., oldName"
@@ -213,8 +219,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">New Field ID</Label>
+                                <Label htmlFor={`${idPrefix}-new-field-id`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">New Field ID</Label>
                                 <Input
+                                    id={`${idPrefix}-new-field-id`}
                                     value={newFieldId}
                                     onChange={(e) => setNewFieldId(e.target.value)}
                                     placeholder="e.g., newName"
@@ -225,8 +232,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
 
                         <TabsContent value="transformEntries" className="mt-0 space-y-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Source Field</Label>
+                                <Label htmlFor={`${idPrefix}-source-field`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Source Field</Label>
                                 <Input
+                                    id={`${idPrefix}-source-field`}
                                     value={fieldId}
                                     onChange={(e) => setFieldId(e.target.value)}
                                     placeholder="e.g., title"
@@ -234,8 +242,9 @@ export const AddStepDialog: React.FC<AddStepDialogProps> = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Target Field</Label>
+                                <Label htmlFor={`${idPrefix}-target-field`} className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground px-1">Target Field</Label>
                                 <Input
+                                    id={`${idPrefix}-target-field`}
                                     value={newFieldId}
                                     onChange={(e) => setNewFieldId(e.target.value)}
                                     placeholder="e.g., slug (leave empty to use source field)"

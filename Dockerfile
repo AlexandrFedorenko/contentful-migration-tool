@@ -1,59 +1,56 @@
-# 1. Install dependencies
-FROM node:18-alpine AS deps
-RUN apk add --no-cache libc6-compat openssl
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+# syntax=docker/dockerfile:1.7
+# One image, three roles (selected by the command):
+#   web      node server.js                  (default)
+#   worker   node dist/worker.js
+#   migrate  npx prisma migrate deploy
 
-# 2. Build the application
-FROM node:18-alpine AS builder
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-trixie-slim AS base
+# OpenSSL is required by the Prisma engines (and lets Prisma detect the right one).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# Copy Prisma schema for migrations
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+FROM base AS deps
+COPY package.json package-lock.json ./
 COPY prisma ./prisma
-# Generate Prisma client before build
-RUN npx prisma generate
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+FROM base AS prod-deps
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund \
+    && npx prisma generate
+
+# ── Build ────────────────────────────────────────────────────────────────────
+FROM deps AS build
+COPY . .
 RUN npm run build
 
-# 3. Production runner with standalone
-FROM node:18-alpine AS runner
-WORKDIR /app
+# ── Runtime ──────────────────────────────────────────────────────────────────
+FROM base AS runner
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0 \
+    DATA_DIR=/data
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
+# Full production node_modules (worker, prisma CLI), then the traced Next.js server on top
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/prisma ./prisma
+COPY --from=build --chown=node:node /app/package.json ./package.json
 
-RUN apk add --no-cache openssl
-
-# Install contentful-cli globally for backup operations
-RUN npm install -g contentful-cli@3.10.2
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy standalone output
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Copy Prisma files for runtime
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-
-# Copy package.json for reference
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-
-# Copy scripts for admin operations
-COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
-
-# Persistent storage for backups
-RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
-
-USER nextjs
+RUN mkdir -p /data && chown node:node /data
+USER node
+VOLUME ["/data"]
 EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+# Run with an init process (docker run --init / compose `init: true`) for signal forwarding.
+CMD ["node", "server.js"]

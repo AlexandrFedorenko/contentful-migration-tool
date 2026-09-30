@@ -29,8 +29,9 @@ describe('ScanResultsList', () => {
 
         expect(screen.getByText('Item 1')).toBeInTheDocument();
         expect(screen.getByText('Item 2')).toBeInTheDocument();
-        expect(screen.getByText('NEW')).toBeInTheDocument();
-        expect(screen.getByText('CHANGED')).toBeInTheDocument();
+        expect(screen.getByText('New')).toBeInTheDocument();
+        expect(screen.getByText('Changed')).toBeInTheDocument();
+        expect(screen.getByText('Synced')).toBeInTheDocument();
     });
 
     it('handles selection correctly', () => {

@@ -16,10 +16,11 @@ jest.mock('next/router', () => ({
     useRouter: () => mockRouter
 }));
 
-// ─── Clerk ────────────────────────────────────────────────────────────────────
+// ─── Session ────────────────────────────────────────────────────────────────────
 const mockUseUser = jest.fn();
-jest.mock('@clerk/nextjs', () => ({
-    useUser: () => mockUseUser()
+jest.mock('@/context/SessionContext', () => ({
+    useUser: () => mockUseUser(),
+    useSession: () => ({ signOut: jest.fn() }),
 }));
 
 // ─── useUserProfile ───────────────────────────────────────────────────────────

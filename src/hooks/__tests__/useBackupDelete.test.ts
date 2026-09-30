@@ -2,112 +2,62 @@ import { renderHook, act } from '@testing-library/react';
 import { useBackupDelete } from '../useBackupDelete';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useLoading } from '../useLoading';
+import { useBackups } from '../useBackups';
+import { api } from '@/utils/api';
 
-// Mocks
-jest.mock('@/context/GlobalContext', () => ({
-    useGlobalContext: jest.fn(),
-}));
-
-jest.mock('../useLoading', () => ({
-    useLoading: jest.fn(),
-}));
-
+jest.mock('@/context/GlobalContext', () => ({ useGlobalContext: jest.fn() }));
+jest.mock('../useLoading', () => ({ useLoading: jest.fn() }));
+jest.mock('../useBackups', () => ({ useBackups: jest.fn() }));
+jest.mock('@/utils/api', () => ({ ...jest.requireActual('@/utils/api'), api: { post: jest.fn() } }));
 jest.mock('@/utils/errorHandler', () => ({
-    handleError: jest.fn((err) => err instanceof Error ? err.message : 'Unknown error'),
+    handleError: jest.fn((err) => (err instanceof Error ? err.message : 'Unknown error')),
 }));
-
-// Setup global fetch mock
-global.fetch = jest.fn();
 
 describe('useBackupDelete', () => {
     const mockDispatch = jest.fn();
-    const mockWithLoading = jest.fn((key, fn) => fn()); // Execute callback immediately
+    const mockLoadBackups = jest.fn();
+    const backup = { id: '123', name: 'test.json', path: '', time: 1000 };
 
     beforeEach(() => {
         jest.clearAllMocks();
-        (useGlobalContext as jest.Mock).mockReturnValue({
-            dispatch: mockDispatch,
-        });
-        (useLoading as jest.Mock).mockReturnValue({
-            withLoading: mockWithLoading,
-        });
+        (useGlobalContext as jest.Mock).mockReturnValue({ dispatch: mockDispatch });
+        (useLoading as jest.Mock).mockReturnValue({ withLoading: jest.fn((_key, fn) => fn()) });
+        (useBackups as jest.Mock).mockReturnValue({ loadBackups: mockLoadBackups });
     });
 
-    it('successfully deletes a backup and reloads list', async () => {
+    it('deletes a backup by id and reloads the list', async () => {
+        (api.post as jest.Mock).mockResolvedValueOnce({ success: true });
         const { result } = renderHook(() => useBackupDelete());
-        const mockBackup = { id: '123', name: 'test.json', path: '/backups/test.json', time: 1000, size: 500 };
-
-        // Mock Delete API Response
-        (global.fetch as jest.Mock)
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ success: true }),
-            })
-            // Mock Reload Backups API Response
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ backups: [] }),
-            });
 
         await act(async () => {
-            await result.current.handleDelete('space-1', mockBackup);
+            await result.current.handleDelete('space-1', backup);
         });
 
-        // 1. Check Delete Call
-        expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/deleteBackup', expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({ spaceId: 'space-1', backupId: '123', fileName: 'test.json' }),
-        }));
-
-        // 2. Check Reload Call
-        expect(global.fetch).toHaveBeenNthCalledWith(2, '/api/backups?spaceId=space-1');
-
-        // 3. Check Status Updates
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_STATUS',
-            payload: 'Deleting backup test.json...',
-        });
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_DATA',
-            payload: { backups: [] },
-        });
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_STATUS',
-            payload: 'Backup test.json deleted successfully',
-        });
+        expect(api.post).toHaveBeenCalledWith('/api/deleteBackup', expect.objectContaining({ spaceId: 'space-1', backupId: '123' }));
+        expect(mockLoadBackups).toHaveBeenCalledWith('space-1', true);
+        expect(mockDispatch).toHaveBeenCalledWith({ type: 'SET_STATUS', payload: 'Backup test.json deleted successfully' });
     });
 
-    it('handles API error during delete', async () => {
+    it('reports API errors', async () => {
+        (api.post as jest.Mock).mockResolvedValueOnce({ success: false, error: 'Backup not found' });
         const { result } = renderHook(() => useBackupDelete());
-        const mockBackup = { id: '123', name: 'fail.json', path: '/backups/fail.json', time: 1000, size: 500 };
-
-        // Mock Delete API Failure
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: false,
-            json: async () => ({ error: 'Delete failed' }),
-        });
 
         await act(async () => {
-            await result.current.handleDelete('space-1', mockBackup);
+            await result.current.handleDelete('space-1', backup);
         });
 
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_STATUS',
-            payload: 'Error deleting backup: Delete failed',
-        });
+        expect(mockLoadBackups).not.toHaveBeenCalled();
+        expect(mockDispatch).toHaveBeenCalledWith({ type: 'SET_STATUS', payload: 'Error deleting backup: Backup not found' });
     });
 
-    it('handles missing backup ID', async () => {
+    it('refuses backups without an id', async () => {
         const { result } = renderHook(() => useBackupDelete());
-        const invalidBackup = { name: 'no-id.json', path: '/backups/no-id.json', time: 1000, size: 500 }; // No ID
 
         await act(async () => {
-            await result.current.handleDelete('space-1', invalidBackup as unknown as import('@/types/backup').Backup);
+            await result.current.handleDelete('space-1', { ...backup, id: undefined });
         });
 
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_STATUS',
-            payload: 'Error deleting backup: Backup ID is missing',
-        });
+        expect(api.post).not.toHaveBeenCalled();
+        expect(mockDispatch).toHaveBeenCalledWith({ type: 'SET_STATUS', payload: 'Error deleting backup: Backup ID is missing' });
     });
 });

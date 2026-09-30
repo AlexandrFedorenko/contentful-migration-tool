@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import SmartRestorePage from '../smart-restore';
+import SmartRestorePage from '@/pages/smart-restore';
 import { mockFetch } from '@/utils/__tests__/test-helpers';
 
 // Mock routing

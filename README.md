@@ -1,143 +1,90 @@
 # Contentful Migration Tool
 
-A professional web application for managing Contentful content across environments. Built with **Next.js 14**, **TypeScript**, **Prisma**, and **Clerk** authentication.
+A web application for moving content and content models between Contentful environments and spaces safely: backups, restores, environment diffs, live transfers and a visual migration builder. Every change to an environment is preceded by an automatic safety backup.
 
 ## Features
 
-### Core Capabilities
-- **🔐 Secure Authentication**: OAuth-based Contentful authentication via Clerk
-- **📦 Smart Backups**: Create full content backups (entries, assets, content types) stored in PostgreSQL
-- **🔄 Environment Migration**: Migrate content between environments with conflict resolution
-- **🎯 Selective Restore**: Restore specific content types or locales from backups
-- **📊 Visual Comparison**: Analyze differences between environments before migrating
+- **Sign in with Contentful** (OAuth) or a personal access token. No separate registration. Tokens are encrypted at rest (AES-256-GCM) and never sent back to the browser.
+- **Backups**: full environment exports (optionally with asset files), stored per user and downloadable as JSON or ZIP.
+- **Restore**: from a stored backup or an uploaded export (+ asset archive), with content type and locale filtering and locale mapping.
+- **Smart Migration**: diff two environments (content model, locales, entries) and migrate the selection with all dependencies.
+- **Live Transfer**: CMA-to-CMA transfer between spaces and environments.
+- **Visual Builder**: build content model migrations without code. Steps are validated on the server and executed with `contentful-migration`.
+- **Views migration**, activity logs, admin dashboard (users, roles, suspension, settings, support tickets).
 
-### Advanced Features
-- **⚡ Live Transfer**: Direct CMA-based content transfer between spaces (no file download)
-- **🗺️ Locale Mapping**: Auto-suggest and manual mapping between different locale codes (e.g., "en" → "en-US")
-- **📈 Activity Logging**: Track all backup, restore, and migration operations
-- **🎨 Modern UI**: Built with shadcn/ui, Tailwind CSS, and dark/light theme support
-- **🐳 Docker Support**: Ready for containerized deployment
+## Architecture
 
-## Tech Stack
+```
+Browser ─▶ Caddy (TLS) ─▶ web: Next.js (UI + API) ─▶ PostgreSQL
+                              │  ▲                    Redis: queue, job events, rate limits, locks
+                              ▼  │
+                           worker: BullMQ jobs ─▶ Contentful Management API
+                    shared volume DATA_DIR: backups, archives, uploads
+```
 
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Auth**: Clerk (with Contentful OAuth integration)
-- **Styling**: Tailwind CSS + shadcn/ui
-- **API**: Contentful Management API (CMA)
+- Long operations run as **background jobs** in a separate worker. Browser disconnects and deploys don't interrupt them; progress is streamed over SSE and can be resumed.
+- **One mutating job per target environment** at a time, a per-user limit on parallel jobs, and a **Contentful API rate limit shared by all workers**.
+- Every API route goes through one pipeline: session → role → rate limit → zod validation → handler → uniform errors.
 
-## Prerequisites
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- Node.js 18+
-- PostgreSQL database
-- Contentful account with Management API access
+## Tech stack
 
-## Installation
+Next.js 15 (Pages Router), React 19, TypeScript, Tailwind + shadcn/ui, TanStack Query · PostgreSQL + Prisma · Redis + BullMQ · `contentful-management`, `contentful-export`, `contentful-import`, `contentful-migration` · Docker, Caddy.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/contentful-migration-tool.git
-   cd contentful-migration-tool
-   ```
+## Getting started (development)
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+Requirements: Node.js 22+, Docker.
 
-3. **Configure environment variables:**
-   Create a `.env` file:
-   ```env
-   # Database
-   DATABASE_URL="postgresql://user:password@localhost:5432/contentful_tool"
-   
-   # Clerk Authentication
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-   CLERK_SECRET_KEY=sk_test_...
-   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
-   
-   # App URL
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
-   ```
+```bash
+cp .env.example .env              # set ENCRYPTION_KEY=$(openssl rand -base64 32)
+docker compose up -d              # PostgreSQL and Redis on localhost
+npm ci
+npx prisma migrate deploy
+npm run dev                       # http://localhost:3000
+npm run worker:dev                # background jobs (separate terminal)
+```
 
-4. **Setup database:**
-   ```bash
-   npx prisma migrate dev
-   ```
+Sign in with a Contentful personal access token, or configure `CONTENTFUL_OAUTH_CLIENT_ID` (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#2-приложение-oauth-в-contentful)).
 
-5. **Run development server:**
-   ```bash
-   npm run dev
-   ```
+## Production
 
-## Project Structure
+One command on a server with Docker: automatic HTTPS, migrations, web, worker, database backups.
+
+```bash
+cp .env.example .env.production   # fill in secrets and domain
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` / `npm run worker:dev` | Development server / worker with reload |
+| `npm run build` | Prisma client, Next.js build, worker bundle (`dist/worker.js`) |
+| `npm start` / `npm run worker` | Run the production build |
+| `npm run db:migrate` | Apply database migrations |
+| `npm run secrets:rotate` | Re-encrypt stored tokens with the current `ENCRYPTION_KEY` |
+| `npm run lint` / `npm run typecheck` / `npm test` | Checks |
+
+## Project structure
 
 ```
 src/
-├── components/        # React UI components
-├── context/          # React contexts (Auth, Theme, Global state)
-├── hooks/            # Custom React hooks
-├── lib/              # Core utilities (db, encryption)
-├── pages/            # Next.js pages & API routes
-│   └── api/          # API endpoints
-├── types/            # TypeScript type definitions
-└── utils/            # Helper functions
-    ├── backup-service.ts
-    ├── contentful-management.ts
-    ├── contentful-cli.ts
-    └── locale-filter.ts
-```
-
-## Key Features Explained
-
-### Smart Restore with Locale Filtering
-When restoring content, the tool intelligently handles locale mismatches:
-- Filters content to only selected locales
-- Maps locale codes between source and target (e.g., "en" → "en-US")
-- Preserves content structure without creating duplicate entries
-
-### Live Transfer
-Transfer content directly between spaces or environments without intermediate files:
-- Recursive dependency resolution (auto-includes linked entries/assets)
-- Rate-limited CMA operations to avoid API limits
-- Cross-space migration support
-
-### Backup Management
-- Cloud backups stored in PostgreSQL (not local files)
-- Optional asset archiving with ZIP download
-- Backup limits and auto-cleanup policies
-
-## API Routes
-
-| Endpoint | Description |
-|----------|-------------|
-| `/api/backup` | Create new backup |
-| `/api/restore` | Restore from backup |
-| `/api/selective-restore` | Restore selected content types/locales |
-| `/api/smart-restore/live-transfer` | Direct CMA transfer |
-| `/api/smart-migrate/cma-diff` | Compare environments |
-| `/api/user/logs` | Activity logging |
-
-## Development
-
-### Running Tests
-```bash
-npm test
-```
-
-### Database Migrations
-```bash
-npx prisma migrate dev
-npx prisma generate
-```
-
-### Docker Deployment
-```bash
-docker-compose up -d
+├── pages/            UI pages and API routes (thin: validate → authorize → call server code)
+├── server/           server-only code
+│   ├── api.ts        API pipeline (auth, validation, rate limits, errors)
+│   ├── auth/         sessions, Contentful sign-in
+│   ├── contentful/   CMA client with shared rate limiter, credentials
+│   ├── jobs/         job definitions, queue, events (SSE), runner, handlers
+│   ├── storage.ts    per-user file storage under DATA_DIR
+│   └── env.ts        validated configuration
+├── worker/           background worker entrypoint
+├── components/ hooks/ context/ utils/ types/
+prisma/               schema and migrations
+deploy/               Caddyfile, database backup script
 ```
 
 ## License

@@ -1,25 +1,25 @@
-version: '3.8'
-
+# Local development services. Run the app with `npm run dev` and `npm run worker:dev`.
+# Ports are bound to localhost only.
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: contentful-migration-db
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adminpassword}
-      POSTGRES_DB: ${POSTGRES_DB:-migration_tool}
+      POSTGRES_USER: ${POSTGRES_USER:-cmt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmt_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cmt}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
-      - ./postgres-data:/var/lib/postgresql/data
-    restart: always
+      - postgres-data:/var/lib/postgresql/data
 
-  # App service (optional for local dev if running via npm run dev, but good for production)
-  # app:
-  #   build: .
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     DATABASE_URL: postgres://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-adminpassword}@postgres:5432/${POSTGRES_DB:-migration_tool}
-  #   depends_on:
-  #     - postgres
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  postgres-data:
+  redis-data:

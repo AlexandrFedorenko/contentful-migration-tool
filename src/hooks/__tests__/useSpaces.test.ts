@@ -1,77 +1,59 @@
+import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useSpaces } from '../useSpaces';
 
-// Setup global fetch mock
 global.fetch = jest.fn();
 
+function wrapper({ children }: { children: React.ReactNode }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return React.createElement(QueryClientProvider, { client }, children);
+}
+
+function mockResponse(status: number, body: unknown) {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: status < 300, status, json: async () => body });
+}
+
 describe('useSpaces', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
+    beforeEach(() => jest.clearAllMocks());
 
-    it('successfully fetches spaces', async () => {
-        const mockSpaces = [{ sys: { id: 's1' }, name: 'Space 1' }];
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ success: true, spaces: mockSpaces }),
-        });
+    it('loads spaces from the API', async () => {
+        const spaces = [{ id: 's1', name: 'Space 1' }];
+        mockResponse(200, { success: true, data: { spaces } });
 
-        const { result } = renderHook(() => useSpaces());
+        const { result } = renderHook(() => useSpaces(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
 
-        // Initially loading might be false until effect runs, or true immediately?
-        // In implementation: useEffect -> fetchSpaces -> setLoading(true)
-        // We wait for loading to complete
-
-        await waitFor(() => {
-            expect(result.current.loading).toBe(false);
-        });
-
-        expect(result.current.spaces).toEqual(mockSpaces);
+        expect(global.fetch).toHaveBeenCalledWith('/api/spaces', expect.objectContaining({ method: 'GET' }));
+        expect(result.current.spaces).toEqual(spaces);
         expect(result.current.error).toBeNull();
     });
 
-    it('handles non-200 API response', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: false,
-            json: async () => ({ message: 'Unauthorized' }),
-        });
+    it('exposes API errors', async () => {
+        mockResponse(401, { success: false, error: 'Sign in required' });
 
-        const { result } = renderHook(() => useSpaces());
+        const { result } = renderHook(() => useSpaces(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
 
-        await waitFor(() => {
-            expect(result.current.loading).toBe(false);
-        });
-
-        expect(result.current.error).toBe('Unauthorized');
+        expect(result.current.error).toBe('Sign in required');
         expect(result.current.spaces).toEqual([]);
     });
 
-    it('handles API reporting success: false', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ success: false, message: 'No spaces found' }),
-        });
+    it('handles success: false responses', async () => {
+        mockResponse(200, { success: false, error: 'Contentful token not configured' });
 
-        const { result } = renderHook(() => useSpaces());
+        const { result } = renderHook(() => useSpaces(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
 
-        await waitFor(() => {
-            expect(result.current.loading).toBe(false);
-        });
-
-        expect(result.current.error).toBe('No spaces found');
-        expect(result.current.spaces).toEqual([]);
+        expect(result.current.error).toBe('Contentful token not configured');
     });
 
-    it('handles network error', async () => {
-        (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network Error'));
+    it('handles network errors', async () => {
+        (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network down'));
 
-        const { result } = renderHook(() => useSpaces());
+        const { result } = renderHook(() => useSpaces(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
 
-        await waitFor(() => {
-            expect(result.current.loading).toBe(false);
-        });
-
-        expect(result.current.error).toBe('Network Error');
-        expect(result.current.spaces).toEqual([]);
+        expect(result.current.error).toBe('Network down');
     });
 });

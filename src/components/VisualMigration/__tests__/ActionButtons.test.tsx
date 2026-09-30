@@ -1,100 +1,74 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ActionButtons } from '../ActionButtons';
-import { saveTemplate } from '@/templates/template-storage';
-import '@testing-library/jest-dom';
+import type { MigrationStep } from '@/templates/migration-templates';
 
-// Mocks
-jest.mock('@/templates/template-storage', () => ({
-    saveTemplate: jest.fn(),
+const mockSaveTemplate = jest.fn();
+jest.mock('@/hooks/useVisualBuilderTemplates', () => ({
+    useVisualBuilderTemplates: () => ({ saveTemplate: mockSaveTemplate, loading: false }),
 }));
+jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 
 global.fetch = jest.fn();
-window.alert = jest.fn();
 
 describe('ActionButtons', () => {
-    const mockOnRun = jest.fn();
-    const defaultProps = {
-        code: 'const migration = ...',
-        contentType: 'testType',
+    const steps: MigrationStep[] = [
+        { id: '1', type: 'field', operation: 'deleteField', label: 'Delete legacy', icon: '🗑️', params: { contentType: 'article', fieldId: 'legacy' } },
+    ];
+    const props = {
+        code: 'module.exports = function (migration) {};',
+        steps,
+        contentType: 'article',
         spaceId: 'space1',
-        targetEnv: 'master',
-        onRun: mockOnRun,
+        targetEnv: 'staging',
+        onRun: jest.fn(),
         isRunning: false,
         disabled: false,
     };
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockSaveTemplate.mockResolvedValue(true);
     });
 
-    it('renders all buttons', () => {
-        render(<ActionButtons {...defaultProps} />);
-        expect(screen.getByText('Preview (Dry-Run)')).toBeInTheDocument();
-        expect(screen.getByText('Save Template')).toBeInTheDocument();
-        expect(screen.getByText('Run Migration')).toBeInTheDocument();
+    it('runs the migration', () => {
+        render(<ActionButtons {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: /run migration/i }));
+        expect(props.onRun).toHaveBeenCalled();
     });
 
-    it('calls onRun when Run button is clicked', () => {
-        render(<ActionButtons {...defaultProps} />);
-        fireEvent.click(screen.getByText('Run Migration'));
-        expect(mockOnRun).toHaveBeenCalledTimes(1);
+    it('does not run while a migration is in progress', () => {
+        render(<ActionButtons {...props} isRunning />);
+        expect(screen.getByRole('button', { name: /running/i })).toBeDisabled();
     });
 
-    it('opens Save Template dialog and saves', () => {
-        render(<ActionButtons {...defaultProps} />);
-
-        // Open Dialog
-        fireEvent.click(screen.getByText('Save Template'));
-        expect(screen.getByText('Template will be saved locally. After database setup, it will sync to cloud.')).toBeInTheDocument();
-
-        // Fill Form
-        fireEvent.change(screen.getByLabelText('Template Name'), { target: { value: 'My Template' } });
-        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Test Desc' } });
-
-        // Click Save inside Dialog
-        // Save button in dialog shares text "Save" or similar? 
-        // DialogActions: <Button onClick={handleSaveTemplate} variant="contained">Save</Button>
-        const saveButtons = screen.getAllByText('Save');
-        fireEvent.click(saveButtons[saveButtons.length - 1]); // The one in dialog
-
-        expect(saveTemplate).toHaveBeenCalledWith(expect.objectContaining({
-            name: 'My Template',
-            description: 'Test Desc',
-        }));
-        expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Template saved locally'));
+    it('saves the current steps as a server template', async () => {
+        render(<ActionButtons {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: /save template/i }));
+        fireEvent.change(screen.getByPlaceholderText('e.g., My Custom Transformation'), { target: { value: 'Cleanup' } });
+        const buttons = screen.getAllByRole('button', { name: /save/i });
+        fireEvent.click(buttons[buttons.length - 1]);
+        await waitFor(() => expect(mockSaveTemplate).toHaveBeenCalledWith('Cleanup', 'Created from Visual Builder', steps));
     });
 
-    it('handles Preview (Dry-Run) success', async () => {
+    it('shows the dry-run result from the server', async () => {
         (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ affectedEntries: 5, estimatedTime: '2s' }),
+            json: async () => ({ success: true, data: { valid: true, affectedEntries: 42, estimatedTime: '9 seconds', warnings: ['This migration deletes content model elements. Data in them will be lost.'] } }),
         });
+        render(<ActionButtons {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: /preview|dry/i }));
 
-        render(<ActionButtons {...defaultProps} />);
-
-        fireEvent.click(screen.getByText('Preview (Dry-Run)'));
-
-        expect(screen.getByText('Migration Preview (Dry-Run)')).toBeInTheDocument();
-        // Loading appears briefly, we wait for result
-        await waitFor(() => {
-            expect(screen.getByText('Migration is valid and ready to run!')).toBeInTheDocument();
-        });
-
-        expect(screen.getByText(/5/)).toBeInTheDocument(); // Affected entries
+        expect(await screen.findByText('42')).toBeInTheDocument();
+        expect(screen.getByText('9 seconds')).toBeInTheDocument();
+        expect(screen.getByText(/deletes content model elements/)).toBeInTheDocument();
+        expect(global.fetch).toHaveBeenCalledWith('/api/visual-migrate-preview', expect.objectContaining({ method: 'POST' }));
     });
 
-    it('handles Preview error', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ error: 'Syntax Error in script' }),
-        });
-
-        render(<ActionButtons {...defaultProps} />);
-        fireEvent.click(screen.getByText('Preview (Dry-Run)'));
-
-        await waitFor(() => {
-            expect(screen.getByText('Syntax Error in script')).toBeInTheDocument();
-        });
+    it('shows validation errors from the dry run', async () => {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({ json: async () => ({ success: false, error: 'Invalid request' }) });
+        render(<ActionButtons {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: /preview|dry/i }));
+        expect(await screen.findByText('Invalid request')).toBeInTheDocument();
     });
 });

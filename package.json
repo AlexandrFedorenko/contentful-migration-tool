@@ -6,7 +6,7 @@
     "dev": "next dev",
     "worker:dev": "tsx watch src/worker/index.ts",
     "build": "prisma generate && next build && npm run build:worker",
-    "build:worker": "esbuild src/worker/index.ts --bundle --platform=node --target=node22 --packages=external --sourcemap --outfile=dist/worker.js",
+    "build:worker": "esbuild worker=src/worker/index.ts rotate-secrets=scripts/rotate-secrets.ts --bundle --platform=node --target=node22 --packages=external --sourcemap --outdir=dist",
     "start": "next start",
     "worker": "node dist/worker.js",
     "db:migrate": "prisma migrate deploy",
@@ -39,7 +39,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.90.21",
     "@types/uuid": "^10.0.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.1",
     "archiver": "^7.0.1",
     "bullmq": "^5.81.5",
     "cmdk": "^1.1.1",
@@ -55,6 +55,7 @@
     "lucide-react": "^0.563.0",
     "next": "^15.1.7",
     "next-themes": "^0.4.6",
+    "prisma": "^5.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-error-boundary": "^6.0.0",
@@ -88,8 +89,7 @@
     "jest-environment-jsdom": "^30.2.0",
     "jest-mock-extended": "^4.0.0",
     "node-mocks-http": "^1.17.2",
-    "postcss": "^8.5.6",
-    "prisma": "^5.22.0",
+    "postcss": "^8.5.28",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
     "tailwindcss-animate": "^1.0.7",
@@ -99,5 +99,10 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "$postcss"
+    }
   }
 }

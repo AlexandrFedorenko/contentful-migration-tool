@@ -15,6 +15,7 @@ jest.mock('@/context/ErrorContext', () => ({
 }));
 
 jest.mock('@/utils/api', () => ({
+    ...jest.requireActual('@/utils/api'),
     api: {
         post: jest.fn(),
     },
@@ -39,87 +40,72 @@ describe('useRestore', () => {
         });
     });
 
-    it('successfully initiates and completes a restore', async () => {
-        const { result } = renderHook(() => useRestore());
-        const mockBackup = { id: '123', name: 'backup.json', path: '/backups/backup.json', time: 1000, size: 500 };
+    const mockBackup = { id: '123', name: 'backup.json', path: '', time: 1000 };
+    const validationOk = { success: true, data: { status: 'ok', sourceLocales: [], targetLocales: [], details: {} } };
 
-        (api.post as jest.Mock).mockResolvedValueOnce({ success: true });
+    it('validates locales, then restores and reports success', async () => {
+        const { result } = renderHook(() => useRestore());
+        (api.post as jest.Mock).mockResolvedValueOnce(validationOk).mockResolvedValueOnce({ success: true, data: {} });
 
         await act(async () => {
             await result.current.handleRestore(mockBackup);
         });
 
-        // 1. Initial Progress Dispatch
+        expect(api.post).toHaveBeenNthCalledWith(1, '/api/validate-restore', expect.objectContaining({ spaceId: 'space-1', targetEnvironment: 'master', backupId: '123' }));
+        expect(api.post).toHaveBeenNthCalledWith(2, '/api/restore', expect.objectContaining({ spaceId: 'space-1', backupId: '123', targetEnvironment: 'master' }));
         expect(mockDispatch).toHaveBeenCalledWith({
             type: 'SET_RESTORE_PROGRESS',
             payload: expect.objectContaining({ isActive: true, restoringBackupName: 'backup.json' }),
         });
-
-        // 2. API Call
-        expect(api.post).toHaveBeenCalledWith('/api/restore', {
-            spaceId: 'space-1',
-            backupId: '123',
-            fileName: 'backup.json',
-            targetEnvironment: 'master',
-        });
-
-        // 3. Success Dispatch
         expect(mockDispatch).toHaveBeenCalledWith({ type: 'CLEAR_ERROR_INSTRUCTION' });
         expect(mockDispatch).toHaveBeenCalledWith({
             type: 'SET_RESTORE_RESULT',
-            payload: { success: true, backupName: 'backup.json', targetEnvironment: 'master' },
+            payload: expect.objectContaining({ success: true, backupName: 'backup.json' }),
         });
     });
 
-    it('throws error if missing required state', async () => {
-        // Missing spaceId
-        (useGlobalContext as jest.Mock).mockReturnValue({
-            state: { spaceId: '', selectedTarget: 'master' },
-            dispatch: mockDispatch,
-        });
-
+    it('asks for a locale mapping when locales do not match', async () => {
         const { result } = renderHook(() => useRestore());
-        const mockBackup = { id: '123', name: 'backup.json', path: '/backups/backup.json', time: 1000, size: 500 };
+        (api.post as jest.Mock).mockResolvedValueOnce({ success: true, data: { status: 'mismatch', sourceLocales: [], targetLocales: [], details: { defaultMismatch: true, missingInTarget: [] } } });
 
         await act(async () => {
             await result.current.handleRestore(mockBackup);
         });
 
-        // Should dispatch result with success: false
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_RESTORE_RESULT',
-            payload: expect.objectContaining({ success: false, errorMessage: expect.stringMatching(/required/i) }),
-        });
+        expect(result.current.mappingModalOpen).toBe(true);
+        expect(api.post).toHaveBeenCalledTimes(1);
     });
 
-    it('handles API failure response', async () => {
+    it('does nothing without a space or target environment', async () => {
+        (useGlobalContext as jest.Mock).mockReturnValue({ state: { spaceId: '', selectedTarget: '' }, dispatch: mockDispatch });
         const { result } = renderHook(() => useRestore());
-        const mockBackup = { id: '123', name: 'backup.json', path: '/backups/backup.json', time: 1000, size: 500 };
-
-        (api.post as jest.Mock).mockResolvedValueOnce({ success: false, error: 'API Error' });
 
         await act(async () => {
             await result.current.handleRestore(mockBackup);
         });
 
-        // Should reset progress (isActive: false)
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: 'SET_RESTORE_PROGRESS',
-            payload: expect.objectContaining({ isActive: false }),
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed restore', async () => {
+        const { result } = renderHook(() => useRestore());
+        (api.post as jest.Mock).mockResolvedValueOnce(validationOk).mockResolvedValueOnce({ success: false, error: 'API Error' });
+        (parseError as jest.Mock).mockReturnValue(null);
+
+        await act(async () => {
+            await result.current.handleRestore(mockBackup);
         });
 
-        // Should dispatch failure result
+        expect(mockDispatch).toHaveBeenCalledWith({ type: 'SET_RESTORE_PROGRESS', payload: expect.objectContaining({ isActive: false }) });
         expect(mockDispatch).toHaveBeenCalledWith({
             type: 'SET_RESTORE_RESULT',
             payload: expect.objectContaining({ success: false, errorMessage: 'API Error' }),
         });
     });
 
-    it('parses known errors and dispatches instruction', async () => {
+    it('shows instructions for known errors', async () => {
         const { result } = renderHook(() => useRestore());
-        const mockBackup = { id: '123', name: 'backup.json', path: '/backups/backup.json', time: 1000, size: 500 };
-
-        (api.post as jest.Mock).mockRejectedValueOnce(new Error('Rate Limit Exceeded'));
+        (api.post as jest.Mock).mockResolvedValueOnce(validationOk).mockRejectedValueOnce(new Error('Rate Limit Exceeded'));
         (parseError as jest.Mock).mockReturnValue('Wait for 60 seconds');
 
         await act(async () => {
@@ -128,11 +114,7 @@ describe('useRestore', () => {
 
         expect(mockDispatch).toHaveBeenCalledWith({
             type: 'SET_ERROR_INSTRUCTION',
-            payload: {
-                instruction: 'Wait for 60 seconds',
-                errorMessage: 'Rate Limit Exceeded',
-                backupFile: 'backup.json',
-            },
+            payload: { instruction: 'Wait for 60 seconds', errorMessage: 'Rate Limit Exceeded', backupFile: 'backup.json' },
         });
     });
 });

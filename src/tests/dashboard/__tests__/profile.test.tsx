@@ -17,26 +17,22 @@ jest.mock('next/router', () => ({
     useRouter: () => mockRouter
 }));
 
-// ─── Clerk ────────────────────────────────────────────────────────────────────
-const mockSetProfileImage = jest.fn();
-const mockOpenUserProfile = jest.fn();
+// ─── Session ────────────────────────────────────────────────────────────────────
 const mockSignOut = jest.fn();
 
 const stableUser = {
     fullName: 'Test User',
     firstName: 'Test',
     primaryEmailAddress: { emailAddress: 'test@example.com' },
-    imageUrl: 'test-image.jpg',
-    setProfileImage: mockSetProfileImage
+    imageUrl: 'test-image.jpg'
 };
 
-jest.mock('@clerk/nextjs', () => ({
+jest.mock('@/context/SessionContext', () => ({
     useUser: () => ({
         isLoaded: true,
         user: stableUser
     }),
-    useClerk: () => ({
-        openUserProfile: mockOpenUserProfile,
+    useSession: () => ({
         signOut: mockSignOut
     })
 }));

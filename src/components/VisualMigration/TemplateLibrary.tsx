@@ -274,6 +274,7 @@ const InnerTemplateCard: React.FC<InnerTemplateCardProps> = ({ template, onUse, 
                                     variant="ghost"
                                     size="icon"
                                     onClick={onDelete}
+                                    aria-label={`Delete template ${template.name}`}
                                     className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 hover:bg-destructive/10"
                                 >
                                     <Trash2 className="h-3 w-3" />

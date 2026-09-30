@@ -49,6 +49,13 @@ docker-compose.override.yml
 *.tsbuildinfo
 next-env.d.ts
 
-# backups
+# runtime data (backups, uploads, job scratch, support screenshots)
 /backups/*
 !/backups/.gitkeep
+/data/
+/dist/
+/public/screenshots/
+
+# local environment
+.env.production
+

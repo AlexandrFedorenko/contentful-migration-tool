@@ -5,7 +5,6 @@ import {
     Zap,
     Database,
     History,
-    Repeat,
     Hammer,
     Cpu,
     CheckCircle2,
